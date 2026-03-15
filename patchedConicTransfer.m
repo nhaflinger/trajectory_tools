@@ -18,6 +18,8 @@ function result = patchedConicTransfer(departBody, arrivalBody, options)
 %                         relative to the transfer plane [default: 0]
 %                     * arrivalInclination (deg) inclination of capture orbit
 %                         relative to the transfer plane [default: 0]
+%                     * arrivalApogeeAltitude (km) apogee altitude of elliptical
+%                         capture orbit; defaults to arrivalAltitude (circular)
 %                     * nRevs (int) for Lambert solver [default: 0]
 %
 %   Outputs:
@@ -50,6 +52,14 @@ end
 
 if ~isfield(options, 'arrivalInclination') || isempty(options.arrivalInclination)
     options.arrivalInclination = 0;
+end
+
+if ~isfield(options, 'arrivalApogeeAltitude') || isempty(options.arrivalApogeeAltitude)
+    options.arrivalApogeeAltitude = options.arrivalAltitude;
+end
+
+if ~isfield(options, 'arrivalArgOfPeriapsis') || isempty(options.arrivalArgOfPeriapsis)
+    options.arrivalArgOfPeriapsis = 0;  % deg; 90 = perilune above north pole
 end
 
 % Quick path for Earth->Moon lunar transfer
@@ -85,18 +95,25 @@ dv_tli = combinedBurnDV(v0, v_perigee, options.departureInclination);
 v_arrival = sqrt(2*Earth.mu/Moon.a - Earth.mu/a_transfer);
 
 % 4) Capture into lunar orbit at h1
-r1 = Moon.radius + h1;
-v_circ_moon = sqrt(Moon.mu / r1);
+r_peri_cap = Moon.radius + h1;
 % Patched conic: v_inf relative to Moon = difference between Moon's circular
 % velocity and spacecraft apogee velocity (both Earth-centered, co-aligned
 % for a prograde transfer).
 v_moon = sqrt(Earth.mu / Moon.a);
 v_inf  = abs(v_moon - v_arrival);
-% In Moon-centered frame, arrival speed at perilune (approx r1).
-% Capture burn: combined speed change + plane change to reach desired
-% lunar orbit inclination.
-v_perilune = sqrt(v_inf^2 + 2*Moon.mu/r1);
-dv_capture = combinedBurnDV(v_perilune, v_circ_moon, options.arrivalInclination);
+% In Moon-centered frame, arrival speed at perilune.
+v_perilune = sqrt(v_inf^2 + 2*Moon.mu/r_peri_cap);
+% Target speed at perilune: elliptical orbit if arrivalApogeeAltitude > h1,
+% circular otherwise.
+r_apo_cap = Moon.radius + options.arrivalApogeeAltitude;
+if r_apo_cap > r_peri_cap
+    a_cap       = (r_peri_cap + r_apo_cap) / 2;
+    v_cap_peri  = sqrt(2*Moon.mu/r_peri_cap - Moon.mu/a_cap);
+else
+    v_cap_peri  = sqrt(Moon.mu / r_peri_cap);
+    a_cap       = r_peri_cap;
+end
+dv_capture = combinedBurnDV(v_perilune, v_cap_peri, options.arrivalInclination);
 
 % Time of flight (half ellipse)
 tof = pi*sqrt(a_transfer^3/Earth.mu);
@@ -115,9 +132,12 @@ res.details = struct('dvTLI', dv_tli, ...
                          'transferSemiMajor', a_transfer, ...
                          'r0', r0, ...
                          'rApogee', Moon.a, ...
-                         'rParkArrive', Moon.radius + h1, ...
+                         'rParkArrive', r_peri_cap, ...
+                         'rApoArrive',  r_apo_cap, ...
+                         'aCaptureOrbit', a_cap, ...
                          'departureInclination', options.departureInclination, ...
                          'arrivalInclination',   options.arrivalInclination, ...
+                         'arrivalArgOfPeriapsis', options.arrivalArgOfPeriapsis, ...
                          'tof', tof);
 end
 

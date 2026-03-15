@@ -254,8 +254,12 @@ if strcmpi(departBody.name, 'Earth') && strcmpi(arrivalBody.name, 'Moon') && ...
 	     'FontSize', 8, 'BackgroundColor', [1 1 1 0.7], 'EdgeColor', [0.7 0.7 0.7]);
 
 	subplot(1, 2, 2);
+	r_apo_moon = 0;
+	if isfield(result.details, 'rApoArrive'), r_apo_moon = result.details.rApoArrive; end
+	omega_arr = 0;
+	if isfield(result.details, 'arrivalArgOfPeriapsis'), omega_arr = result.details.arrivalArgOfPeriapsis; end
 	plotBodyCentric3D(bodies.Moon, result.details.rParkArrive, result.details.vInf, ...
-	    inc_arr, 'hyperbola', 'Lunar Arrival');
+	    inc_arr, 'hyperbola', 'Lunar Arrival', r_apo_moon, omega_arr);
 	arrStr = sprintf('\\DeltaV_{cap} = %.3f km/s', result.details.dvCapture);
 	if isfield(result, 'departureJD')
 		arrJD  = result.departureJD + result.tof / 86400;
@@ -268,14 +272,28 @@ end
 end
 
 % -------------------------------------------------------------------------
-function plotBodyCentric3D(body, r_peri, traj_param, inc_deg, traj_type, titleStr)
-%PLODYBODYCENTRIC3D Unified 3D body-centric departure/arrival view.
+function plotBodyCentric3D(body, r_peri, traj_param, inc_deg, traj_type, titleStr, r_apo_orbit, omega_deg)
+%PLOTBODYCENTRIC3D Unified 3D body-centric departure/arrival view.
 %   traj_type: 'hyperbola' — draws hyperbolic pass (interplanetary / lunar capture)
 %              'tli'       — draws clipped TLI ellipse arc (lunar departure)
 %   traj_param: v_inf (km/s) for hyperbola, a_transfer (km) for tli
 %   inc_deg: orbit inclination relative to transfer plane (deg)
+%   r_apo_orbit: apoapsis radius of capture orbit (km); omit or 0 for circular
+%   omega_deg: argument of periapsis (deg); rotates orbit in its own plane
 
-lim = 3 * r_peri;
+if nargin < 7 || isempty(r_apo_orbit) || r_apo_orbit <= r_peri
+    r_apo_orbit = 0;
+end
+if nargin < 8 || isempty(omega_deg)
+    omega_deg = 0;
+end
+
+% Expand view to contain full orbit when apogee is present
+if r_apo_orbit > 0
+    lim = max(3 * r_peri, 1.15 * r_apo_orbit);
+else
+    lim = 3 * r_peri;
+end
 
 % --- Trajectory in transfer plane (z = 0) ---
 if strcmpi(traj_type, 'hyperbola')
@@ -304,12 +322,50 @@ y_traj = r_traj .* sin(nu);
 z_traj = zeros(size(nu));
 
 % --- Parking / capture orbit inclined at inc_deg ---
-% Ascending node along periapsis direction (+x)
+% Ascending node along periapsis direction (+x).
+% If apogee is given draw full ellipse, otherwise circular.
 inc_rad = deg2rad(inc_deg);
-th  = linspace(0, 2*pi, 300);
-x_p = r_peri * cos(th);
-y_p = r_peri * sin(th) * cos(inc_rad);
-z_p = r_peri * sin(th) * sin(inc_rad);
+th = linspace(0, 2*pi, 300);
+if r_apo_orbit > 0
+    a_orb  = (r_peri + r_apo_orbit) / 2;
+    e_orb  = (r_apo_orbit - r_peri) / (r_apo_orbit + r_peri);
+    r_orb  = a_orb * (1 - e_orb^2) ./ (1 + e_orb * cos(th));
+    x_p    = r_orb .* cos(th);
+    y_p    = r_orb .* sin(th) * cos(inc_rad);
+    z_p    = r_orb .* sin(th) * sin(inc_rad);
+    orbitLabel = sprintf('Orbit (i=%.1f°, e=%.3f)', inc_deg, e_orb);
+else
+    x_p = r_peri * cos(th);
+    y_p = r_peri * sin(th) * cos(inc_rad);
+    z_p = r_peri * sin(th) * sin(inc_rad);
+    orbitLabel = sprintf('Orbit (i=%.1f°)', inc_deg);
+end
+
+% --- Apply argument of periapsis rotation (Rodrigues formula) ---
+% Orbit normal for ascending node at +x, inclination i: n = [0; -sin(i); cos(i)]
+if abs(omega_deg) > 0.01
+    inc_rad_rot = deg2rad(inc_deg);
+    n_hat = [0; -sin(inc_rad_rot); cos(inc_rad_rot)];
+    om    = deg2rad(omega_deg);
+    % Rodrigues rotation matrix: R = cos(om)*I + (1-cos(om))*(n*n') + sin(om)*[n]_x
+    nx = n_hat(1); ny = n_hat(2); nz = n_hat(3);
+    skew_n = [0, -nz,  ny;
+              nz,  0, -nx;
+             -ny,  nx,  0];
+    R_om = cos(om)*eye(3) + (1 - cos(om))*(n_hat*n_hat') + sin(om)*skew_n;
+    % Rotate orbit ring
+    pts_orb = R_om * [x_p; y_p; z_p];
+    x_p = pts_orb(1,:);  y_p = pts_orb(2,:);  z_p = pts_orb(3,:);
+    % Rotate arrival/departure trajectory so its periapsis aligns with the
+    % capture orbit periapsis — spacecraft arrives at the correct pole
+    pts_traj = R_om * [x_traj; y_traj; z_traj];
+    x_traj = pts_traj(1,:);  y_traj = pts_traj(2,:);  z_traj = pts_traj(3,:);
+    % Rotate periapsis marker
+    peri_rot = R_om * [r_peri; 0; 0];
+    peri_x = peri_rot(1);  peri_y = peri_rot(2);  peri_z = peri_rot(3);
+else
+    peri_x = r_peri;  peri_y = 0;  peri_z = 0;
+end
 
 % --- Reference plane discs ---
 th_d = linspace(0, 2*pi, 120);
@@ -337,11 +393,23 @@ end
 surf(sx*R_vis, sy*R_vis, sz*R_vis, 'FaceColor', bodyColor(body.name), ...
      'EdgeColor', 'none', 'DisplayName', body.name);
 plot3(x_p, y_p, z_p, '--', 'Color', [0.0 0.75 0.9], 'LineWidth', 1.2, ...
-      'DisplayName', sprintf('Orbit (i=%.1f°)', inc_deg));
+      'DisplayName', orbitLabel);
 plot3(x_traj, y_traj, z_traj, '-', 'Color', [0.6 0.1 0.8], 'LineWidth', 2, ...
       'DisplayName', trajLabel);
-plot3(r_peri, 0, 0, 'o', 'MarkerSize', 7, 'MarkerFaceColor', 'c', ...
+plot3(peri_x, peri_y, peri_z, 'o', 'MarkerSize', 7, 'MarkerFaceColor', 'c', ...
       'MarkerEdgeColor', 'k', 'DisplayName', 'Periapsis');
+
+% North/South pole labels when orbit is significantly polar and ω is set
+if inc_deg > 45 && abs(omega_deg) > 0.01
+    text(0, 0,  lim*0.55, 'North Pole', 'FontSize', 8, 'Color', [0.2 0.6 0.2], ...
+         'HorizontalAlignment', 'center', 'HandleVisibility', 'off');
+    text(0, 0, -lim*0.55, 'South Pole', 'FontSize', 8, 'Color', [0.55 0.35 0.1], ...
+         'HorizontalAlignment', 'center', 'HandleVisibility', 'off');
+    % Landing zone marker at south pole surface
+    text(0, 0, -body.radius*1.15, '\downarrow Landing Zone', 'FontSize', 8, ...
+         'Color', [0.85 0.25 0.1], 'HorizontalAlignment', 'center', ...
+         'FontWeight', 'bold', 'HandleVisibility', 'off');
+end
 
 % Reference frame arrows
 aLen = lim * 0.42;
