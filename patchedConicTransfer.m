@@ -62,9 +62,23 @@ if ~isfield(options, 'arrivalArgOfPeriapsis') || isempty(options.arrivalArgOfPer
     options.arrivalArgOfPeriapsis = 0;  % deg; 90 = perilune above north pole
 end
 
+if ~isfield(options, 'transferMode') || isempty(options.transferMode)
+    options.transferMode = 'direct';
+end
+
+% biEllipticApoapsisAltitude: altitude (km) of intermediate equatorial orbit
+% apoapsis for the plane-change burn.  0 = use Moon SOI (maximum savings).
+if ~isfield(options, 'biEllipticApoapsisAltitude') || isempty(options.biEllipticApoapsisAltitude)
+    options.biEllipticApoapsisAltitude = 0;
+end
+
 % Quick path for Earth->Moon lunar transfer
 if strcmpi(departBody.name, 'Earth') && strcmpi(arrivalBody.name, 'Moon')
-    result = lunarTransfer(options.departureAltitude, options.arrivalAltitude, options);
+    if strcmpi(options.transferMode, 'biElliptic')
+        result = lunarTransferBiElliptic(options.departureAltitude, options.arrivalAltitude, options);
+    else
+        result = lunarTransfer(options.departureAltitude, options.arrivalAltitude, options);
+    end
     return;
 end
 
@@ -205,6 +219,113 @@ res.details = struct('dvDeparture', dv_dep, ...
                          'rParkArrive', r_cap, ...
                          'departureInclination', options.departureInclination, ...
                          'arrivalInclination',   options.arrivalInclination);
+end
+
+function res = lunarTransferBiElliptic(h0, h1, options)
+%LUNARTRANSFERBIELLIPTIC Bi-elliptic plane-change Earth->Moon transfer.
+%
+%   Arrival sequence (3 burns):
+%     Burn 1 (perilune):  hyperbola -> equatorial ellipse, NO plane change
+%     Burn 2 (apolune):   pure plane change where spacecraft is slowest
+%     Burn 3 (perilune):  lower apoapsis from intermediate to final value
+%
+%   Key identity: dv_arr = (v_hyp_peri - v_final_peri) + 2*v_bi_apo*sin(i/2)
+%   The v_bi_peri terms in burns 1 and 3 cancel exactly, so savings grow
+%   monotonically with intermediate apoapsis.  Default uses Moon SOI.
+
+bodies = constants();
+Earth  = bodies.Earth;
+Moon   = bodies.Moon;
+
+% Moon SOI relative to Earth (used as default upper bound)
+r_soi_moon = Moon.a * (Moon.mu / Earth.mu)^(2/5);  % ~66 183 km
+
+% TLI — identical to direct case
+r0         = Earth.radius + h0;
+v0         = sqrt(Earth.mu / r0);
+a_transfer = (r0 + Moon.a) / 2;
+v_perigee  = sqrt(2*Earth.mu/r0 - Earth.mu/a_transfer);
+dv_tli     = combinedBurnDV(v0, v_perigee, options.departureInclination);
+
+% Arrival v_inf at Moon
+v_arrival  = sqrt(2*Earth.mu/Moon.a - Earth.mu/a_transfer);
+v_moon     = sqrt(Earth.mu / Moon.a);
+v_inf      = abs(v_moon - v_arrival);
+
+r_peri     = Moon.radius + h1;
+v_hyp_peri = sqrt(v_inf^2 + 2*Moon.mu/r_peri);
+
+r_apo_final = Moon.radius + options.arrivalApogeeAltitude;
+a_final     = (r_peri + r_apo_final) / 2;
+v_final_peri = sqrt(2*Moon.mu/r_peri - Moon.mu/a_final);
+
+% Intermediate apoapsis: user-specified or Moon SOI (optimal)
+if options.biEllipticApoapsisAltitude > 0
+    r_bi_apo = Moon.radius + options.biEllipticApoapsisAltitude;
+    r_bi_apo = max(r_bi_apo, r_apo_final);   % must be >= final orbit apoapsis
+else
+    r_bi_apo = r_soi_moon;
+end
+
+[dv_loi, dv_plane, dv_trim] = biEllipticCapture( ...
+    Moon, v_hyp_peri, r_peri, r_bi_apo, r_apo_final, options.arrivalInclination);
+dv_arr = dv_loi + dv_plane + dv_trim;
+
+% Capture orbit for consistent reporting (same as direct)
+if r_apo_final > r_peri
+    a_cap = a_final;
+else
+    a_cap = r_peri;
+end
+
+tof        = pi * sqrt(a_transfer^3 / Earth.mu);
+nMoon      = sqrt(Earth.mu / Moon.a^3);
+phaseAngle = rad2deg(pi - nMoon * tof);
+
+res           = struct();
+res.deltaV    = dv_tli + dv_arr;
+res.tof       = tof;
+res.phaseAngle = phaseAngle;
+res.details   = struct( ...
+    'dvTLI',                  dv_tli, ...
+    'dvCapture',              dv_arr, ...
+    'dvLOI',                  dv_loi, ...
+    'dvPlaneChange',          dv_plane, ...
+    'dvApoapsisTrim',         dv_trim, ...
+    'vInf',                   v_inf, ...
+    'transferSemiMajor',      a_transfer, ...
+    'r0',                     r0, ...
+    'rApogee',                Moon.a, ...
+    'rParkArrive',            r_peri, ...
+    'rApoArrive',             r_apo_final, ...
+    'rBiEllipticApoapsis',    r_bi_apo, ...
+    'aCaptureOrbit',          a_cap, ...
+    'departureInclination',   options.departureInclination, ...
+    'arrivalInclination',     options.arrivalInclination, ...
+    'arrivalArgOfPeriapsis',  options.arrivalArgOfPeriapsis, ...
+    'tof',                    tof);
+end
+
+function [dv_loi, dv_plane, dv_trim] = biEllipticCapture( ...
+        Moon, v_hyp_peri, r_peri, r_bi_apo, r_apo_final, inc_deg)
+%BIELLIPTICCAPTURE Three-burn bi-elliptic lunar orbit capture.
+%   Burn 1 (perilune):  hyperbola -> r_peri x r_bi_apo equatorial, no plane change
+%   Burn 2 (apolune):   pure inc_deg plane change at r_bi_apo
+%   Burn 3 (perilune):  adjust apoapsis to r_apo_final, no plane change
+%
+%   For r_bi_apo >= r_apo_final the v_bi_peri terms cancel and
+%   dv_total = (v_hyp_peri - v_final_peri) + 2*v_bi_apo*sin(inc/2).
+
+a_bi      = (r_peri + r_bi_apo) / 2;
+v_bi_peri = sqrt(2*Moon.mu/r_peri - Moon.mu/a_bi);
+v_bi_apo  = sqrt(2*Moon.mu/r_bi_apo - Moon.mu/a_bi);
+
+a_final      = (r_peri + r_apo_final) / 2;
+v_final_peri = sqrt(2*Moon.mu/r_peri - Moon.mu/a_final);
+
+dv_loi   = v_hyp_peri - v_bi_peri;               % retrograde, no plane change
+dv_plane = 2 * v_bi_apo * sin(deg2rad(inc_deg)/2); % pure plane change
+dv_trim  = abs(v_bi_peri - v_final_peri);          % apoapsis adjustment
 end
 
 function dv = combinedBurnDV(v_before, v_after, inc_deg)
