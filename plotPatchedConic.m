@@ -258,9 +258,25 @@ if strcmpi(departBody.name, 'Earth') && strcmpi(arrivalBody.name, 'Moon') && ...
 	if isfield(result.details, 'rApoArrive'), r_apo_moon = result.details.rApoArrive; end
 	omega_arr = 0;
 	if isfield(result.details, 'arrivalArgOfPeriapsis'), omega_arr = result.details.arrivalArgOfPeriapsis; end
+	% Build intermediate orbit list for bi-elliptic transfers
+	extra_orbits = {};
+	if isfield(result.details, 'rBiEllipticApoapsis')
+		r_bi  = result.details.rBiEllipticApoapsis;
+		r_p   = result.details.rParkArrive;
+		alt_bi = r_bi - bodies.Moon.radius;
+		extra_orbits{1} = struct('r_peri', r_p, 'r_apo', r_bi, 'inc', 0, ...
+		    'label', sprintf('Post-LOI equatorial (apo = %.0f km)', alt_bi));
+		extra_orbits{2} = struct('r_peri', r_p, 'r_apo', r_bi, 'inc', inc_arr, ...
+		    'label', sprintf('Post-\\Deltai polar (apo = %.0f km)', alt_bi));
+	end
 	plotBodyCentric3D(bodies.Moon, result.details.rParkArrive, result.details.vInf, ...
-	    inc_arr, 'hyperbola', 'Lunar Arrival', r_apo_moon, omega_arr);
-	arrStr = sprintf('\\DeltaV_{cap} = %.3f km/s', result.details.dvCapture);
+	    inc_arr, 'hyperbola', 'Lunar Arrival', r_apo_moon, omega_arr, extra_orbits);
+	if isfield(result.details, 'rBiEllipticApoapsis')
+		arrStr = sprintf('\\DeltaV_{LOI} = %.3f  \\DeltaV_{\\Deltai} = %.3f  \\DeltaV_{trim} = %.3f km/s', ...
+		    result.details.dvLOI, result.details.dvPlaneChange, result.details.dvApoapsisTrim);
+	else
+		arrStr = sprintf('\\DeltaV_{cap} = %.3f km/s', result.details.dvCapture);
+	end
 	if isfield(result, 'departureJD')
 		arrJD  = result.departureJD + result.tof / 86400;
 		arrStr = sprintf('%s\nArr: %s', arrStr, datestr(arrJD - 1721058.5, 'yyyy-mm-dd'));
@@ -272,7 +288,7 @@ end
 end
 
 % -------------------------------------------------------------------------
-function plotBodyCentric3D(body, r_peri, traj_param, inc_deg, traj_type, titleStr, r_apo_orbit, omega_deg)
+function plotBodyCentric3D(body, r_peri, traj_param, inc_deg, traj_type, titleStr, r_apo_orbit, omega_deg, extra_orbits)
 %PLOTBODYCENTRIC3D Unified 3D body-centric departure/arrival view.
 %   traj_type: 'hyperbola' — draws hyperbolic pass (interplanetary / lunar capture)
 %              'tli'       — draws clipped TLI ellipse arc (lunar departure)
@@ -280,6 +296,8 @@ function plotBodyCentric3D(body, r_peri, traj_param, inc_deg, traj_type, titleSt
 %   inc_deg: orbit inclination relative to transfer plane (deg)
 %   r_apo_orbit: apoapsis radius of capture orbit (km); omit or 0 for circular
 %   omega_deg: argument of periapsis (deg); rotates orbit in its own plane
+%   extra_orbits: cell array of structs with fields r_peri, r_apo, inc, label
+%                 (used for bi-elliptic intermediate orbits)
 
 if nargin < 7 || isempty(r_apo_orbit) || r_apo_orbit <= r_peri
     r_apo_orbit = 0;
@@ -287,12 +305,19 @@ end
 if nargin < 8 || isempty(omega_deg)
     omega_deg = 0;
 end
+if nargin < 9 || isempty(extra_orbits)
+    extra_orbits = {};
+end
 
 % Expand view to contain full orbit when apogee is present
 if r_apo_orbit > 0
     lim = max(3 * r_peri, 1.15 * r_apo_orbit);
 else
     lim = 3 * r_peri;
+end
+% Expand further to contain extra orbits (e.g. bi-elliptic intermediate)
+for k = 1:numel(extra_orbits)
+    lim = max(lim, 1.15 * extra_orbits{k}.r_apo);
 end
 
 % --- Trajectory in transfer plane (z = 0) ---
@@ -341,31 +366,27 @@ else
     orbitLabel = sprintf('Orbit (i=%.1f°)', inc_deg);
 end
 
-% --- Apply argument of periapsis rotation (Rodrigues formula) ---
+% --- Argument of periapsis rotation (Rodrigues formula) ---
 % Orbit normal for ascending node at +x, inclination i: n = [0; -sin(i); cos(i)]
+% Always compute R_om; it is identity when omega_deg == 0.
+inc_rad_rot = deg2rad(inc_deg);
+n_hat = [0; -sin(inc_rad_rot); cos(inc_rad_rot)];
+om    = deg2rad(omega_deg);
+nx = n_hat(1); ny = n_hat(2); nz = n_hat(3);
+skew_n = [0, -nz,  ny;
+          nz,  0, -nx;
+         -ny,  nx,  0];
+R_om = cos(om)*eye(3) + (1 - cos(om))*(n_hat*n_hat') + sin(om)*skew_n;
 if abs(omega_deg) > 0.01
-    inc_rad_rot = deg2rad(inc_deg);
-    n_hat = [0; -sin(inc_rad_rot); cos(inc_rad_rot)];
-    om    = deg2rad(omega_deg);
-    % Rodrigues rotation matrix: R = cos(om)*I + (1-cos(om))*(n*n') + sin(om)*[n]_x
-    nx = n_hat(1); ny = n_hat(2); nz = n_hat(3);
-    skew_n = [0, -nz,  ny;
-              nz,  0, -nx;
-             -ny,  nx,  0];
-    R_om = cos(om)*eye(3) + (1 - cos(om))*(n_hat*n_hat') + sin(om)*skew_n;
     % Rotate orbit ring
     pts_orb = R_om * [x_p; y_p; z_p];
     x_p = pts_orb(1,:);  y_p = pts_orb(2,:);  z_p = pts_orb(3,:);
-    % Rotate arrival/departure trajectory so its periapsis aligns with the
-    % capture orbit periapsis — spacecraft arrives at the correct pole
+    % Rotate trajectory so periapsis aligns with capture orbit periapsis
     pts_traj = R_om * [x_traj; y_traj; z_traj];
     x_traj = pts_traj(1,:);  y_traj = pts_traj(2,:);  z_traj = pts_traj(3,:);
-    % Rotate periapsis marker
-    peri_rot = R_om * [r_peri; 0; 0];
-    peri_x = peri_rot(1);  peri_y = peri_rot(2);  peri_z = peri_rot(3);
-else
-    peri_x = r_peri;  peri_y = 0;  peri_z = 0;
 end
+peri_rot = R_om * [r_peri; 0; 0];
+peri_x = peri_rot(1);  peri_y = peri_rot(2);  peri_z = peri_rot(3);
 
 % --- Reference plane discs ---
 th_d = linspace(0, 2*pi, 120);
@@ -397,7 +418,42 @@ plot3(x_p, y_p, z_p, '--', 'Color', [0.0 0.75 0.9], 'LineWidth', 1.2, ...
 plot3(x_traj, y_traj, z_traj, '-', 'Color', [0.6 0.1 0.8], 'LineWidth', 2, ...
       'DisplayName', trajLabel);
 plot3(peri_x, peri_y, peri_z, 'o', 'MarkerSize', 7, 'MarkerFaceColor', 'c', ...
-      'MarkerEdgeColor', 'k', 'DisplayName', 'Periapsis');
+      'MarkerEdgeColor', 'k', 'DisplayName', 'Periapsis (Burn 1 & 3)');
+
+% --- Bi-elliptic intermediate orbits ---
+% Each extra orbit is rotated by the same R_om so all periapses coincide.
+% Orbit 1 (equatorial, high apo): drawn in the transfer plane (inc=0) then rotated.
+% Orbit 2 (polar,      high apo): drawn with full inc then rotated — same shape,
+%   different plane → visually distinct, showing the plane change.
+ex_colors = {[0.95 0.55 0.05], [0.15 0.82 0.25]};   % orange, lime-green
+ex_styles  = {'--', ':'};
+for k = 1:numel(extra_orbits)
+    eo    = extra_orbits{k};
+    th_e  = linspace(0, 2*pi, 300);
+    a_e   = (eo.r_peri + eo.r_apo) / 2;
+    e_e   = (eo.r_apo - eo.r_peri) / (eo.r_apo + eo.r_peri);
+    r_e   = a_e * (1 - e_e^2) ./ (1 + e_e * cos(th_e));
+    inc_e = deg2rad(eo.inc);
+    xe = r_e .* cos(th_e);
+    ye = r_e .* sin(th_e) * cos(inc_e);
+    ze = r_e .* sin(th_e) * sin(inc_e);
+    pts_e = R_om * [xe; ye; ze];
+    xe = pts_e(1,:);  ye = pts_e(2,:);  ze = pts_e(3,:);
+    cidx = min(k, numel(ex_colors));
+    sidx = min(k, numel(ex_styles));
+    plot3(xe, ye, ze, ex_styles{sidx}, 'Color', ex_colors{cidx}, ...
+          'LineWidth', 1.2, 'DisplayName', eo.label);
+end
+% Burn 2 marker: plane change occurs at apolune of the intermediate orbit.
+% After R_om the apolune of the equatorial intermediate orbit (nu = π → −r_bi_apo, 0, 0)
+% maps to (0, 0, −r_bi_apo) regardless of inclination — directly above the south pole.
+if numel(extra_orbits) >= 1
+    apo_pt = R_om * [-extra_orbits{1}.r_apo; 0; 0];
+    plot3(apo_pt(1), apo_pt(2), apo_pt(3), 's', 'MarkerSize', 9, ...
+          'MarkerFaceColor', [1.0 0.85 0.0], 'MarkerEdgeColor', 'k', ...
+          'DisplayName', sprintf('Burn 2 – plane change (%.0f km alt)', ...
+          extra_orbits{1}.r_apo - body.radius));
+end
 
 % North/South pole labels when orbit is significantly polar and ω is set
 if inc_deg > 45 && abs(omega_deg) > 0.01

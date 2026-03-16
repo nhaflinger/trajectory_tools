@@ -76,8 +76,11 @@ fprintf('  Orbital period:           %.2f hours\n', T_cap_hr);
 fprintf('  Speed at perilune:        %.3f km/s\n', v_peri);
 fprintf('  Speed at apolune:         %.3f km/s\n', v_apo);
 
-%% Trajectory plots (direct result — overview and body-centric views)
+%% Trajectory plots — direct transfer (overview + body-centric)
 plotPatchedConic(result_direct, bodies.Earth, bodies.Moon);
+
+%% Trajectory plots — bi-elliptic transfer (body-centric shows intermediate orbits)
+plotPatchedConic(result_bi, bodies.Earth, bodies.Moon);
 
 %% Delta-V comparison figure
 figure('Name', 'Delta-V Comparison: Direct vs Bi-elliptic', 'NumberTitle', 'off', ...
