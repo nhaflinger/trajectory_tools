@@ -213,6 +213,7 @@ elseif isfield(result.details, 'r1') && isfield(result.details, 'r2') && isfield
 		subplot(1, 2, 1);
 		plotBodyCentric3D(departBody, result.details.rParkDepart, result.details.vInfDepart, ...
 		    inc_dep, 'hyperbola', sprintf('%s Departure', departBody.name));
+		view(212, 22);
 		depStr = sprintf('\\DeltaV = %.3f km/s', result.details.dvDeparture);
 		if isfield(result, 'departureJD')
 			depStr = sprintf('%s\nDep: %s', depStr, datestr(result.departureJD - 1721058.5, 'yyyy-mm-dd'));
@@ -417,8 +418,13 @@ plot3(x_p, y_p, z_p, '--', 'Color', [0.0 0.75 0.9], 'LineWidth', 1.2, ...
       'DisplayName', orbitLabel);
 plot3(x_traj, y_traj, z_traj, '-', 'Color', [0.6 0.1 0.8], 'LineWidth', 2, ...
       'DisplayName', trajLabel);
+if ~isempty(extra_orbits)
+    peri_label = 'Periapsis (Burn 1 & 3)';
+else
+    peri_label = 'Periapsis';
+end
 plot3(peri_x, peri_y, peri_z, 'o', 'MarkerSize', 7, 'MarkerFaceColor', 'c', ...
-      'MarkerEdgeColor', 'k', 'DisplayName', 'Periapsis (Burn 1 & 3)');
+      'MarkerEdgeColor', 'k', 'DisplayName', peri_label);
 
 % --- Bi-elliptic intermediate orbits ---
 % Each extra orbit is rotated by the same R_om so all periapses coincide.

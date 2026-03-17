@@ -57,10 +57,43 @@ cb.Label.String = 'ΔV (km/s)';
 xlabel('Departure Date');
 ylabel('Time of Flight (days)');
 
-% Convert JD axis to calendar dates (approximate)
-xt = linspace(min(departJD), max(departJD), 8);
-xtLabels = datestr(xt - 1721058.5, 'yyyy-mm-dd');
-set(gca, 'XTick', xt, 'XTickLabel', xtLabels);
+% Dual-level calendar ticks: year boundaries (major) + month starts (minor).
+% For ranges < 1 year with no Jan 1 present, falls back to monthly major ticks.
+dn_min = min(departJD) - 1721058.5;   % JD -> MATLAB datenum
+dn_max = max(departJD) - 1721058.5;
+ax     = gca;
+
+% --- Major ticks: Jan 1 of each year within range ---
+dv_lo   = datevec(dn_min);
+dv_hi   = datevec(dn_max);
+yr_dns  = arrayfun(@(y) datenum(y, 1, 1), dv_lo(1) : dv_hi(1)+1);
+yr_dns  = yr_dns(yr_dns >= dn_min & yr_dns <= dn_max);
+
+% --- Minor ticks: 1st of each non-January month within range ---
+y = dv_lo(1);  m = dv_lo(2) + 1;
+if m > 12,  m = 1;  y = y + 1;  end
+mo_dns = [];
+while datenum(y, m, 1) <= dn_max
+    if m ~= 1
+        mo_dns(end+1) = datenum(y, m, 1);  %#ok<AGROW>
+    end
+    m = m + 1;
+    if m > 12,  m = 1;  y = y + 1;  end
+end
+
+if numel(yr_dns) >= 2
+    % Multi-year span: year labels on major ticks, unlabelled minor month ticks
+    set(ax, 'XTick', yr_dns + 1721058.5, 'XTickLabel', datestr(yr_dns(:), 'yyyy'));
+    if ~isempty(mo_dns)
+        ax.XAxis.MinorTickValues = mo_dns + 1721058.5;
+        ax.XMinorTick = 'on';
+    end
+else
+    % Sub-year span: monthly major ticks with month+year labels
+    all_dns = sort([yr_dns, mo_dns]);
+    set(ax, 'XTick', all_dns + 1721058.5, 'XTickLabel', datestr(all_dns(:), 'mmm yyyy'));
+    xtickangle(45);
+end
 
 title(sprintf('Pork Chop Plot: %s -> %s', departBody.name, arrivalBody.name));
 
