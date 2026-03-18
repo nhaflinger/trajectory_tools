@@ -133,75 +133,137 @@ if strcmpi(departBody.name, 'Earth') && strcmpi(arrivalBody.name, 'Moon')
 	view(32, 22);
 
 elseif isfield(result.details, 'r1') && isfield(result.details, 'r2') && isfield(result.details, 'aTransfer')
-	% Interplanetary transfer — work in AU for readable axes
-	AU = 149597870.7; % km
-	r1 = result.details.r1 / AU;
-	r2 = result.details.r2 / AU;
-	a  = result.details.aTransfer / AU;
-	e  = abs(r2 - r1) / (r2 + r1);
+	AU    = 149597870.7;   % km per AU
+	muSun = constants().Sun.mu;
 
-	% Circular planet orbits
-	thetaC = linspace(0, 2*pi, 400);
-	x1 = r1 * cos(thetaC);
-	y1 = r1 * sin(thetaC);
-	x2 = r2 * cos(thetaC);
-	y2 = r2 * sin(thetaC);
+	if isfield(result.details, 'r1_vec')
+		% ---- 3D heliocentric plot: true elliptic orbits + Lambert arc ----
+		r1_vec = result.details.r1_vec;
+		r2_vec = result.details.r2_vec;
+		v1t    = result.details.v1_transfer;
 
-	% Full transfer ellipse (dashed background)
-	theta = linspace(0, 2*pi, 400);
-	r_ell = a * (1 - e^2) ./ (1 + e*cos(theta));
-	x_ell = r_ell .* cos(theta);
-	y_ell = r_ell .* sin(theta);
+		% Planet orbit ellipses in heliocentric ecliptic frame
+		[xDep, yDep, zDep] = planetOrbit3D(departBody);
+		[xArr, yArr, zArr] = planetOrbit3D(arrivalBody);
 
-	% Active transfer arc (perihelion -> aphelion, then rotate by phase)
-	phase_rad = deg2rad(result.phaseAngle);
-	rot = [cos(phase_rad), -sin(phase_rad); sin(phase_rad), cos(phase_rad)];
-	transferTheta = linspace(0, pi, 120);
-	r_arc = a * (1 - e^2) ./ (1 + e*cos(transferTheta));
-	x_arc = r_arc .* cos(transferTheta);
-	y_arc = r_arc .* sin(transferTheta);
-	rotated = rot * [x_arc; y_arc];
+		% Full transfer orbit ellipse (background) and active arc
+		[xEll, yEll, zEll] = fullOrbitTrace(r1_vec, v1t, muSun);
+		[xArc, yArc, zArc] = transferArc3D(r1_vec, v1t, r2_vec, muSun);
 
-	% Departure and arrival positions (correctly using rotated arc endpoints)
-	depPos = rotated(:, 1);
-	arrPos = rotated(:, end);
+		% Faint ecliptic reference plane
+		r_max = max(norm(r2_vec), norm(r1_vec)) * 1.3 / AU;
+		th_d  = linspace(0, 2*pi, 120);
+		patch(r_max*cos(th_d), r_max*sin(th_d), zeros(size(th_d)), [0.92 0.90 0.78], ...
+		      'FaceAlpha', 0.10, 'EdgeColor', 'none', 'DisplayName', 'Ecliptic plane');
+		hold on;
 
-	% --- Draw ---
-	plot(0, 0, 'o', 'MarkerSize', 12, 'MarkerFaceColor', [1.0 0.85 0.0], ...
-	     'MarkerEdgeColor', [0.8 0.6 0.0], 'DisplayName', 'Sun');
-	hold on;
-	plot(x1, y1, '-',  'Color', [0.2 0.5 1.0], 'LineWidth', 1.2, 'DisplayName', departBody.name);
-	plot(x2, y2, '-',  'Color', [0.9 0.3 0.2], 'LineWidth', 1.2, 'DisplayName', arrivalBody.name);
-	plot(x_ell, y_ell, '--', 'Color', [0.6 0.6 0.6], 'LineWidth', 0.8, 'DisplayName', 'Transfer ellipse');
-	plot(rotated(1,:), rotated(2,:), '-', 'Color', [0.6 0.1 0.8], 'LineWidth', 2.0, 'DisplayName', 'Trajectory');
+		% Sun
+		[sx, sy, sz] = sphere(20);
+		r_sun_vis = 0.025 * AU;
+		surf(sx*r_sun_vis/AU, sy*r_sun_vis/AU, sz*r_sun_vis/AU, ...
+		     'FaceColor', [1.0 0.90 0.0], 'EdgeColor', 'none', 'DisplayName', 'Sun');
 
-	% Departure / arrival markers
-	plot(depPos(1), depPos(2), 'o', 'MarkerSize', 8, 'MarkerFaceColor', 'c', ...
-	     'MarkerEdgeColor', 'k', 'DisplayName', 'Departure');
-	plot(arrPos(1), arrPos(2), 'o', 'MarkerSize', 8, 'MarkerFaceColor', [0.1 0.8 0.1], ...
-	     'MarkerEdgeColor', 'k', 'DisplayName', 'Arrival');
+		% Planet orbit traces
+		plot3(xDep/AU, yDep/AU, zDep/AU, '-', 'Color', [0.2 0.5 1.0], 'LineWidth', 1.2, ...
+		      'DisplayName', departBody.name);
+		plot3(xArr/AU, yArr/AU, zArr/AU, '-', 'Color', [0.9 0.3 0.2], 'LineWidth', 1.2, ...
+		      'DisplayName', arrivalBody.name);
 
-	% Planet name labels near orbits
-	text(r1, 0, [' ' departBody.name], 'Color', [0.2 0.5 1.0], 'FontWeight', 'bold', 'FontSize', 9);
-	text(r2, 0, [' ' arrivalBody.name], 'Color', [0.9 0.3 0.2], 'FontWeight', 'bold', 'FontSize', 9);
+		% Transfer orbit (full ellipse, dashed) then active arc (solid)
+		plot3(xEll/AU, yEll/AU, zEll/AU, '--', 'Color', [0.65 0.65 0.65], 'LineWidth', 0.8, ...
+		      'DisplayName', 'Transfer ellipse');
+		plot3(xArc/AU, yArc/AU, zArc/AU, '-', 'Color', [0.6 0.1 0.8], 'LineWidth', 2.5, ...
+		      'DisplayName', 'Transfer arc');
 
-	hold off;
-	axis equal;
-	title(sprintf('Coplanar Transfer: %s \\rightarrow %s', departBody.name, arrivalBody.name));
-	legend('Location', 'best');
-	xlabel('AU');
-	ylabel('AU');
-	grid on;
+		% Departure and arrival markers
+		plot3(r1_vec(1)/AU, r1_vec(2)/AU, r1_vec(3)/AU, 'o', 'MarkerSize', 9, ...
+		      'MarkerFaceColor', 'c', 'MarkerEdgeColor', 'k', 'DisplayName', 'Departure');
+		plot3(r2_vec(1)/AU, r2_vec(2)/AU, r2_vec(3)/AU, 'o', 'MarkerSize', 9, ...
+		      'MarkerFaceColor', [0.1 0.8 0.1], 'MarkerEdgeColor', 'k', 'DisplayName', 'Arrival');
 
-	% Info annotation: ΔV and TOF
-	tofDays = result.tof / 86400;
-	infoStr = sprintf('\\DeltaV = %.2f km/s    TOF = %.1f days', result.deltaV, tofDays);
-	if isfield(result, 'departureJD')
-		depStr  = datestr(result.departureJD - 1721058.5, 'yyyy-mm-dd');
-		infoStr = sprintf('%s    Dep: %s', infoStr, depStr);
+		% Departure body position at arrival (shows how far it has moved)
+		if isfield(result.details, 'departureJD') && isfield(result.details, 'tofDays')
+			jd_arr = result.details.departureJD + result.details.tofDays;
+			[rDep_at_arr, ~] = orbitalState(departBody, jd_arr);
+			plot3(rDep_at_arr(1)/AU, rDep_at_arr(2)/AU, rDep_at_arr(3)/AU, 'o', ...
+			      'MarkerSize', 7, 'MarkerFaceColor', [0.5 0.7 1.0], 'MarkerEdgeColor', 'k', ...
+			      'DisplayName', sprintf('%s at arrival', departBody.name));
+		end
+
+		% Ecliptic frame reference arrows
+		aLen = r_max * 0.22;
+		quiver3(0,0,0, aLen,0,0, 0, 'Color',[0.82 0.72 0.1],'LineWidth',1.5,'HandleVisibility','off');
+		quiver3(0,0,0, 0,aLen,0, 0, 'Color',[0.82 0.72 0.1],'LineWidth',1.5,'HandleVisibility','off');
+		quiver3(0,0,0, 0,0,aLen, 0, 'Color',[0.82 0.72 0.1],'LineWidth',1.5,'HandleVisibility','off');
+		text(aLen*1.06, 0,        0,        '\gamma',  'FontSize',9,'FontWeight','bold','Color',[0.7 0.6 0.05]);
+		text(0,        aLen*1.06, 0,        'y_{ecl}', 'FontSize',8,'Color',[0.7 0.6 0.05]);
+		text(0,        0,        aLen*1.06, 'z_{ecl}', 'FontSize',8,'Color',[0.7 0.6 0.05]);
+
+		hold off;
+		axis equal;  grid on;
+		xlabel('x (AU)');  ylabel('y (AU)');  zlabel('z (AU)');
+		title(sprintf('Heliocentric Transfer: %s \\rightarrow %s', departBody.name, arrivalBody.name));
+		legend('Location', 'northeast', 'FontSize', 7);
+		view(30, 20);
+
+	else
+		% ---- 2D Hohmann fallback (no Lambert data) ----
+		r1 = result.details.r1 / AU;
+		r2 = result.details.r2 / AU;
+		a  = result.details.aTransfer / AU;
+		e  = abs(r2 - r1) / (r2 + r1);
+
+		thetaC = linspace(0, 2*pi, 400);
+		theta  = linspace(0, 2*pi, 400);
+		r_ell  = a * (1 - e^2) ./ (1 + e*cos(theta));
+
+		phase_rad = deg2rad(result.phaseAngle);
+		rot       = [cos(phase_rad), -sin(phase_rad); sin(phase_rad), cos(phase_rad)];
+		transferTheta = linspace(0, pi, 120);
+		r_arc  = a * (1 - e^2) ./ (1 + e*cos(transferTheta));
+		rotated = rot * [r_arc .* cos(transferTheta); r_arc .* sin(transferTheta)];
+		depPos = rotated(:,1);   arrPos = rotated(:,end);
+
+		plot(0, 0, 'o', 'MarkerSize', 12, 'MarkerFaceColor', [1.0 0.85 0.0], ...
+		     'MarkerEdgeColor', [0.8 0.6 0.0], 'DisplayName', 'Sun');
+		hold on;
+		plot(r1*cos(thetaC), r1*sin(thetaC), '-', 'Color',[0.2 0.5 1.0],'LineWidth',1.2,'DisplayName',departBody.name);
+		plot(r2*cos(thetaC), r2*sin(thetaC), '-', 'Color',[0.9 0.3 0.2],'LineWidth',1.2,'DisplayName',arrivalBody.name);
+		plot(r_ell.*cos(theta), r_ell.*sin(theta), '--', 'Color',[0.6 0.6 0.6],'LineWidth',0.8,'DisplayName','Transfer ellipse');
+		plot(rotated(1,:), rotated(2,:), '-', 'Color',[0.6 0.1 0.8],'LineWidth',2.0,'DisplayName','Trajectory');
+		plot(depPos(1), depPos(2), 'o', 'MarkerSize',8,'MarkerFaceColor','c','MarkerEdgeColor','k','DisplayName','Departure');
+		plot(arrPos(1), arrPos(2), 'o', 'MarkerSize',8,'MarkerFaceColor',[0.1 0.8 0.1],'MarkerEdgeColor','k','DisplayName','Arrival');
+		hold off;
+		axis equal;  grid on;
+		xlabel('AU');  ylabel('AU');
+		title(sprintf('Coplanar Transfer: %s \\rightarrow %s', departBody.name, arrivalBody.name));
+		legend('Location', 'best');
 	end
-	text(0.02, 0.02, infoStr, 'Units', 'normalized', 'VerticalAlignment', 'bottom', ...
-	     'FontSize', 8, 'BackgroundColor', [1 1 1 0.7], 'EdgeColor', [0.7 0.7 0.7]);
+
+	% ---- Info annotation (ΔV budget, C3, v∞, TCM) ----
+	tofDays = result.tof / 86400;
+	infoLines = {};
+	if isfield(result.details, 'dvTCM')
+		infoLines{end+1} = sprintf('\\DeltaV_{dep}=%.3f  \\DeltaV_{arr}=%.3f  TCM=%.0f m/s', ...
+		    result.details.dvDeparture, result.details.dvArrival, result.details.dvTCM*1000);
+	else
+		infoLines{end+1} = sprintf('\\DeltaV=%.3f km/s', result.deltaV);
+	end
+	if isfield(result.details, 'C3')
+		infoLines{end+1} = sprintf('C3=%.2f km^2/s^2   v_{\\infty,dep}=%.3f   v_{\\infty,arr}=%.3f km/s', ...
+		    result.details.C3, result.details.vInfDepart, result.details.vInfArrive);
+	end
+	infoLines{end+1} = sprintf('TOF=%.1f days', tofDays);
+	if isfield(result.details, 'departureJD')
+		depStr = datestr(result.details.departureJD - 1721058.5, 'yyyy-mm-dd');
+		arrStr = datestr(result.details.departureJD + result.details.tofDays - 1721058.5, 'yyyy-mm-dd');
+		infoLines{end+1} = sprintf('Dep: %s   Arr: %s', depStr, arrStr);
+	elseif isfield(result, 'departureJD')
+		infoLines{end+1} = sprintf('Dep: %s', datestr(result.departureJD - 1721058.5, 'yyyy-mm-dd'));
+	end
+	text(0.02, 0.02, strjoin(infoLines, newline), 'Units', 'normalized', ...
+	     'VerticalAlignment', 'bottom', 'FontSize', 8, ...
+	     'BackgroundColor', [1 1 1 0.75], 'EdgeColor', [0.7 0.7 0.7]);
 
 	% Body-centric departure and arrival plots
 	if isfield(result.details, 'vInfDepart') && isfield(result.details, 'rParkDepart')

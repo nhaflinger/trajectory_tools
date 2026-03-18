@@ -66,6 +66,17 @@ if ~isfield(options, 'transferMode') || isempty(options.transferMode)
     options.transferMode = 'direct';
 end
 
+% Lambert options (interplanetary only)
+if ~isfield(options, 'departureJD') || isempty(options.departureJD)
+    options.departureJD = [];
+end
+if ~isfield(options, 'tofDays') || isempty(options.tofDays)
+    options.tofDays = [];
+end
+if ~isfield(options, 'transferType') || isempty(options.transferType)
+    options.transferType = 'type1';   % 'type1' = short-way, 'type2' = long-way
+end
+
 % biEllipticApoapsisAltitude: altitude (km) of intermediate equatorial orbit
 % apoapsis for the plane-change burn.  0 = use Moon SOI (maximum savings).
 if ~isfield(options, 'biEllipticApoapsisAltitude') || isempty(options.biEllipticApoapsisAltitude)
@@ -156,69 +167,95 @@ res.details = struct('dvTLI', dv_tli, ...
 end
 
 function res = interplanetaryTransfer(departBody, arrivalBody, options)
-% INTERPLANETARYTRANSFER simple Hohmann-style transfer between planets
-
-% Assume circular coplanar orbits
-r1 = departBody.a;
-r2 = arrivalBody.a;
+% INTERPLANETARYTRANSFER Patched-conic interplanetary transfer.
+% Uses Lambert solver when departureJD + tofDays are provided;
+% falls back to Hohmann approximation otherwise.
 
 muSun = constants().Sun.mu;
 
-% Transfer orbit
-a_t = (r1 + r2)/2;
+% ---- Heliocentric leg ----
+if ~isempty(options.departureJD) && ~isempty(options.tofDays)
+    % Lambert-based transfer with true Keplerian planet positions
+    jd_dep    = options.departureJD;
+    jd_arr    = jd_dep + options.tofDays;
+    tof       = options.tofDays * 86400;
+    isLongWay = strcmpi(options.transferType, 'type2');
 
-% Velocity in circular orbits
-v1 = sqrt(muSun/r1);
-v2 = sqrt(muSun/r2);
+    [r1_vec, v1_body] = orbitalState(departBody, jd_dep);
+    [r2_vec, v2_body] = orbitalState(arrivalBody, jd_arr);
+    [v1t, v2t]        = lambertSolver(r1_vec, r2_vec, tof, muSun, isLongWay);
 
-% Velocity at perihelion/aphelion of transfer orbit
-v_peri = sqrt(2*muSun/r1 - muSun/a_t);
-v_apo  = sqrt(2*muSun/r2 - muSun/a_t);
+    v_inf_dep = norm(v1t - v1_body);
+    v_inf_arr = norm(v2_body - v2t);
+    r1        = norm(r1_vec);
+    r2        = norm(r2_vec);
+    a_t       = 1 / (2/r1 - dot(v1t, v1t)/muSun);
+    phase_deg = 0;   % not a meaningful scalar for Lambert
 
-% Heliocentric delta-vs — these equal the hyperbolic excess speeds
-% relative to each body for a coplanar Hohmann transfer.
-v_inf_dep = abs(v_peri - v1);
-v_inf_arr = abs(v2 - v_apo);
+    has_lambert = true;
+else
+    % Hohmann-style fallback (circular coplanar)
+    r1 = departBody.a;   r2 = arrivalBody.a;
+    a_t   = (r1 + r2) / 2;
+    v_peri = sqrt(2*muSun/r1 - muSun/a_t);
+    v_apo  = sqrt(2*muSun/r2 - muSun/a_t);
+    v_inf_dep = abs(v_peri - sqrt(muSun/r1));
+    v_inf_arr = abs(sqrt(muSun/r2) - v_apo);
+    tof       = pi * sqrt(a_t^3 / muSun);
+    phase_deg = rad2deg(pi*(1 - sqrt((2*r2)/(r1+r2))));
 
-% Body-centric departure burn: combined TLI + plane change.
-% departureInclination is the angle between the parking orbit plane
-% and the ecliptic transfer plane.
-r_park = departBody.radius + options.departureAltitude;
-v_park = sqrt(departBody.mu / r_park);
+    r1_vec = [];  v1_body = [];  v1t = [];
+    r2_vec = [];  v2_body = [];  v2t = [];
+    has_lambert = false;
+end
+
+% ---- Body-centric burns (same for both paths) ----
+r_park    = departBody.radius + options.departureAltitude;
+v_park    = sqrt(departBody.mu / r_park);
 v_hyp_dep = sqrt(v_inf_dep^2 + 2*departBody.mu/r_park);
-dv_dep = combinedBurnDV(v_park, v_hyp_dep, options.departureInclination);
+dv_dep    = combinedBurnDV(v_park, v_hyp_dep, options.departureInclination);
 
-% Body-centric arrival burn: combined capture + plane change.
-% arrivalInclination is the angle between the capture orbit plane
-% and the arrival hyperbola plane.
-r_cap = arrivalBody.radius + options.arrivalAltitude;
-v_cap = sqrt(arrivalBody.mu / r_cap);
+r_cap     = arrivalBody.radius + options.arrivalAltitude;
+v_cap     = sqrt(arrivalBody.mu / r_cap);
 v_hyp_arr = sqrt(v_inf_arr^2 + 2*arrivalBody.mu/r_cap);
-dv_arr = combinedBurnDV(v_hyp_arr, v_cap, options.arrivalInclination);
+dv_arr    = combinedBurnDV(v_hyp_arr, v_cap, options.arrivalInclination);
 
-% Time of flight (half period)
-tof = pi * sqrt(a_t^3/muSun);
+% ---- C3 and TCM budget (suggestions 4 & 5) ----
+C3     = v_inf_dep^2;                              % km^2/s^2
+dv_tcm = max(0.010, min(0.050, 0.02*v_inf_dep));   % 2% of v_inf_dep, 10-50 m/s
 
-% Phase angle (approx for circular coplanar)
-phase_rad = pi*(1 - sqrt((2*r2)/(r1 + r2)));
-phase_deg = rad2deg(phase_rad);
-
-res = struct();
-res.deltaV = dv_dep + dv_arr;
-res.tof = tof;
+% ---- Pack result ----
+res           = struct();
+res.deltaV    = dv_dep + dv_arr + dv_tcm;
+res.deltaVBurns = dv_dep + dv_arr;
+res.tof       = tof;
 res.phaseAngle = phase_deg;
-res.details = struct('dvDeparture', dv_dep, ...
-                         'dvArrival',   dv_arr, ...
-                         'tof', tof, ...
-                         'r1', r1, ...
-                         'r2', r2, ...
-                         'aTransfer',   a_t, ...
-                         'vInfDepart',  v_inf_dep, ...
-                         'vInfArrive',  v_inf_arr, ...
-                         'rParkDepart', r_park, ...
-                         'rParkArrive', r_cap, ...
-                         'departureInclination', options.departureInclination, ...
-                         'arrivalInclination',   options.arrivalInclination);
+res.details   = struct( ...
+    'dvDeparture', dv_dep, ...
+    'dvArrival',   dv_arr, ...
+    'dvTCM',       dv_tcm, ...
+    'C3',          C3, ...
+    'vInfDepart',  v_inf_dep, ...
+    'vInfArrive',  v_inf_arr, ...
+    'tof',         tof, ...
+    'r1',          r1, ...
+    'r2',          r2, ...
+    'aTransfer',   a_t, ...
+    'rParkDepart', r_park, ...
+    'rParkArrive', r_cap, ...
+    'departureInclination', options.departureInclination, ...
+    'arrivalInclination',   options.arrivalInclination);
+
+if has_lambert
+    res.details.r1_vec     = r1_vec;
+    res.details.v1_transfer = v1t;
+    res.details.r2_vec     = r2_vec;
+    res.details.v2_transfer = v2t;
+    res.details.v1_body    = v1_body;
+    res.details.v2_body    = v2_body;
+    res.details.departureJD = options.departureJD;
+    res.details.tofDays    = options.tofDays;
+end
 end
 
 function res = lunarTransferBiElliptic(h0, h1, options)
