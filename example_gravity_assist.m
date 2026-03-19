@@ -34,13 +34,16 @@ fprintf('  ΔV proxy:         %.3f km/s\n\n', best.deltaVProxy);
 
 %% ---- Full trajectory at the best date ----
 seqOpts = struct();
-seqOpts.departureAltitude     = 200;    % km, LEO
-seqOpts.arrivalAltitude       = 500;    % km, Jupiter capture periapsis
-seqOpts.arrivalApogeeAltitude = 500;    % km, circular capture
-seqOpts.departureInclination  = 28.5;   % deg, KSC
-seqOpts.arrivalInclination    = 0;      % deg
-seqOpts.flybyAltitudes        = 500;    % km above Venus surface
-seqOpts.atmosphereAltitudes   = 250;    % km, Venus atmosphere top
+seqOpts.departureAltitude     = 200;       % km, LEO
+seqOpts.arrivalAltitude       = 500;       % km, Jupiter perijove altitude
+seqOpts.arrivalApogeeAltitude = 8100000;   % km, highly elliptical capture
+                                            % (~Juno-like 53-day orbit, apojove ~116 R_J)
+                                            % Captures with small ΔV; circularisation
+                                            % done later via subsequent perijove burns.
+seqOpts.departureInclination  = 28.5;      % deg, KSC
+seqOpts.arrivalInclination    = 0;         % deg
+seqOpts.flybyAltitudes        = 500;       % km above Venus surface
+seqOpts.atmosphereAltitudes   = 250;       % km, Venus atmosphere top
 
 result = flybySequence(bSeq, best.departureJD, best.tofDays, seqOpts);
 
@@ -119,7 +122,7 @@ bestDirect = findBestLaunchDate(bodies.Earth, bodies.Jupiter, jdStart, jdEndDire
 directSeqOpts = struct();
 directSeqOpts.departureAltitude    = seqOpts.departureAltitude;
 directSeqOpts.arrivalAltitude      = seqOpts.arrivalAltitude;
-directSeqOpts.arrivalApogeeAltitude= seqOpts.arrivalApogeeAltitude;
+directSeqOpts.arrivalApogeeAltitude = seqOpts.arrivalApogeeAltitude;
 directSeqOpts.departureInclination = seqOpts.departureInclination;
 directSeqOpts.arrivalInclination   = seqOpts.arrivalInclination;
 directSeqOpts.departureJD          = bestDirect.departureJD;
