@@ -574,15 +574,103 @@ view(32, 22);
 end
 
 % -------------------------------------------------------------------------
+function [x, y, z] = planetOrbit3D(body)
+%PLANETORBIT3D  Heliocentric ecliptic Cartesian trace of a full planet orbit.
+% Uses J2000 Keplerian elements when available; falls back to circular.
+if ~isfield(body,'Omega') || ~isfield(body,'omega_peri') || ~isfield(body,'M0')
+    th = linspace(0, 2*pi, 360);
+    x  = body.a * cos(th);
+    y  = body.a * sin(th);
+    z  = zeros(size(th));
+    return;
+end
+a   = body.a;  e = body.e;
+Om  = deg2rad(body.Omega);
+om  = deg2rad(body.omega_peri);
+inc = deg2rad(body.inclination);
+cOm = cos(Om);  sOm = sin(Om);
+com = cos(om);  som = sin(om);
+ci  = cos(inc); si  = sin(inc);
+R = [ cOm*com - sOm*som*ci,  -cOm*som - sOm*com*ci,  sOm*si;
+      sOm*com + cOm*som*ci,  -sOm*som + cOm*com*ci,  -cOm*si;
+      si*som,                  si*com,                  ci    ];
+nu     = linspace(0, 2*pi, 360);
+p      = a * (1 - e^2);
+r      = p ./ (1 + e*cos(nu));
+r_pqw  = [r.*cos(nu); r.*sin(nu); zeros(1,360)];
+r_ecl  = R * r_pqw;
+x = r_ecl(1,:);  y = r_ecl(2,:);  z = r_ecl(3,:);
+end
+
+% -------------------------------------------------------------------------
+function [x, y, z] = fullOrbitTrace(r_vec, v_vec, mu)
+%FULLORBITTRACE  Full orbit ellipse of the transfer orbit derived from r, v.
+r_vec = r_vec(:);  v_vec = v_vec(:);
+R1    = norm(r_vec);
+h_vec = cross(r_vec, v_vec);
+e_vec = cross(v_vec, h_vec)/mu - r_vec/R1;
+e     = norm(e_vec);
+if e > 1e-8
+    P_hat = e_vec / e;
+else
+    P_hat = r_vec / R1;
+end
+W_hat = h_vec / norm(h_vec);
+Q_hat = cross(W_hat, P_hat);
+a_t   = 1 / (2/R1 - dot(v_vec,v_vec)/mu);
+p_t   = a_t * (1 - e^2);
+nu    = linspace(0, 2*pi, 360);
+r     = p_t ./ (1 + e*cos(nu));
+x = r .* (P_hat(1)*cos(nu) + Q_hat(1)*sin(nu));
+y = r .* (P_hat(2)*cos(nu) + Q_hat(2)*sin(nu));
+z = r .* (P_hat(3)*cos(nu) + Q_hat(3)*sin(nu));
+end
+
+% -------------------------------------------------------------------------
+function [x, y, z] = transferArc3D(r1_vec, v1_vec, r2_vec, mu)
+%TRANSFERARC3D  Active arc of the Lambert transfer orbit from r1 to r2.
+r1_vec = r1_vec(:);  v1_vec = v1_vec(:);  r2_vec = r2_vec(:);
+R1    = norm(r1_vec);
+h_vec = cross(r1_vec, v1_vec);
+e_vec = cross(v1_vec, h_vec)/mu - r1_vec/R1;
+e     = norm(e_vec);
+if e > 1e-8
+    P_hat = e_vec / e;
+else
+    P_hat = r1_vec / R1;
+end
+W_hat = h_vec / norm(h_vec);
+Q_hat = cross(W_hat, P_hat);
+a_t   = 1 / (2/R1 - dot(v1_vec,v1_vec)/mu);
+p_t   = a_t * (1 - e^2);
+% True anomaly at r1 and r2
+nu1 = atan2(dot(r1_vec, Q_hat), dot(r1_vec, P_hat));
+nu2 = atan2(dot(r2_vec, Q_hat), dot(r2_vec, P_hat));
+if nu2 <= nu1,  nu2 = nu2 + 2*pi;  end
+nu  = linspace(nu1, nu2, 300);
+r   = p_t ./ (1 + e*cos(nu));
+x = r .* (P_hat(1)*cos(nu) + Q_hat(1)*sin(nu));
+y = r .* (P_hat(2)*cos(nu) + Q_hat(2)*sin(nu));
+z = r .* (P_hat(3)*cos(nu) + Q_hat(3)*sin(nu));
+end
+
+% -------------------------------------------------------------------------
 function col = bodyColor(name)
 switch lower(name)
-    case 'earth',   col = [0.20 0.45 0.75];
-    case 'mars',    col = [0.72 0.28 0.18];
-    case 'moon',    col = [0.72 0.72 0.72];
-    case 'venus',   col = [0.85 0.75 0.35];
-    case 'jupiter', col = [0.75 0.60 0.45];
-    case 'ceres',   col = [0.55 0.52 0.50];
-    case 'vesta',   col = [0.60 0.58 0.52];
-    otherwise,      col = [0.50 0.55 0.60];
+    case 'earth',    col = [0.20 0.45 0.75];
+    case 'mars',     col = [0.72 0.28 0.18];
+    case 'moon',     col = [0.72 0.72 0.72];
+    case 'venus',    col = [0.85 0.75 0.35];
+    case 'jupiter',  col = [0.75 0.60 0.45];
+    case 'saturn',   col = [0.85 0.80 0.55];
+    case 'uranus',   col = [0.55 0.85 0.85];
+    case 'neptune',  col = [0.25 0.40 0.85];
+    case 'pluto',    col = [0.70 0.60 0.55];
+    case 'ceres',    col = [0.55 0.52 0.50];
+    case 'vesta',    col = [0.60 0.58 0.52];
+    case 'eris',     col = [0.80 0.78 0.80];
+    case 'makemake', col = [0.75 0.55 0.50];
+    case 'haumea',   col = [0.65 0.75 0.70];
+    otherwise,       col = [0.50 0.55 0.60];
 end
 end
