@@ -17,6 +17,13 @@ Key capabilities:
 - C3, departure/arrival v∞, ΔV budget breakdown, and TCM reserve
 - 3D heliocentric overview with true elliptical planet orbits and actual Lambert transfer arc
 
+**Gravity Assists**
+- Multi-body flyby sequences with any number of intermediate flyby bodies
+- Free gravity assists (|v∞_in| = |v∞_out|) and powered flybys (Oberth-effect ΔV at periapsis)
+- Per-flyby: deflection angle, required periapsis radius, feasibility check, max achievable deflection
+- Grid search for optimal departure date and per-leg TOFs
+- 3D heliocentric visualization of all legs with flyby annotations
+
 **Lunar**
 - Hohmann / direct transfers with inclination and argument-of-periapsis control
 - Bi-elliptic plane-change transfers to polar lunar orbits (south pole missions)
@@ -40,11 +47,16 @@ Key capabilities:
 | `patchedConicTransfer.m` | Core solver — lunar and interplanetary ΔV and trajectory parameters |
 | `plotPatchedConic.m` | All visualization: 3D heliocentric overview, body-centric plots, bi-elliptic orbits |
 | `porkChopPlot.m` | Pork-chop contour plot over a departure/arrival date grid |
-| `findBestLaunchDate.m` | Grid search for minimum-ΔV launch window |
+| `findBestLaunchDate.m` | Grid search for minimum-ΔV two-body launch window |
+| `gravityAssist.m` | Flyby geometry analysis: deflection angle, periapsis, powered-flyby ΔV |
+| `flybySequence.m` | Multi-leg Lambert chaining with gravity-assist analysis at each flyby body |
+| `findBestFlybyWindow.m` | Grid search for minimum-ΔV gravity-assist launch window |
+| `plotFlybySequence.m` | 3D heliocentric visualization of multi-leg gravity-assist trajectories |
 | `julianDate.m` | Gregorian → Julian Date conversion |
 | `example_lunar_transfer.m` | Basic Earth–Moon transfer example |
 | `example_lunar_south_pole.m` | South-pole mission: direct vs bi-elliptic polar capture comparison |
 | `example_interplanetary_transfer.m` | Earth–Mars transfer with Lambert solver and pork-chop plot |
+| `example_gravity_assist.m` | Earth–Venus–Jupiter gravity-assist trajectory with direct comparison |
 
 ---
 
@@ -56,6 +68,7 @@ Open MATLAB, add the repository folder to your path, then run any example script
 run('example_interplanetary_transfer.m')
 run('example_lunar_south_pole.m')
 run('example_lunar_transfer.m')
+run('example_gravity_assist.m')
 ```
 
 ---
@@ -201,6 +214,69 @@ Savings grow monotonically with the intermediate apoapsis. At the Moon's SOI (~6
 - Reports transfer orbit parameters (a, e, period), v∞ at Moon SOI, and approach speed at perilune for both modes
 - TCM budget (2% of TLI ΔV, minimum 10 m/s) included in both the comparison table and the bar chart
 - Compares direct and bi-elliptic transfers with a full ΔV breakdown and 3D plots showing all intermediate orbits
+
+---
+
+---
+
+## Gravity Assist Design
+
+### Quick start
+
+```matlab
+bodies = constants();
+bSeq   = {bodies.Earth, bodies.Venus, bodies.Jupiter};
+
+% Search for best departure window
+tofRanges = [100, 250; 600, 1200];   % [min, max] days per leg
+best = findBestFlybyWindow(bSeq, julianDate(2026,1,1), julianDate(2030,12,31), tofRanges);
+
+% Full trajectory analysis
+result = flybySequence(bSeq, best.departureJD, best.tofDays);
+plotFlybySequence(result, bSeq);
+```
+
+### `flybySequence` options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `departureAltitude` | 200 km | Parking orbit altitude at departure body |
+| `arrivalAltitude` | 400 km | Capture orbit periapsis altitude at arrival body |
+| `arrivalApogeeAltitude` | = `arrivalAltitude` | Capture orbit apoapsis altitude |
+| `departureInclination` | 0° | Departure parking orbit inclination |
+| `arrivalInclination` | 0° | Capture orbit inclination |
+| `flybyAltitudes` | 300 km each | 1×(N−2) periapsis altitude at each flyby body |
+| `atmosphereAltitudes` | 0 km each | 1×(N−2) minimum safe altitude above body surface |
+| `transferTypes` | `'type1'` each | Per-leg `'type1'` (short-way) or `'type2'` (long-way) |
+
+### Output fields (`flybySequence`)
+
+| Field | Description |
+|-------|-------------|
+| `result.deltaV` | Total ΔV: departure + powered flybys + arrival + TCM (km/s) |
+| `result.deltaVBurns` | Same without TCM reserve (km/s) |
+| `result.tof` | Total time of flight (days) |
+| `result.details.dvDeparture` | Departure burn ΔV (km/s) |
+| `result.details.dvPoweredFlybys` | Sum of powered-flyby burns (km/s); 0 for free GAs |
+| `result.details.dvArrival` | Arrival/capture burn ΔV (km/s) |
+| `result.details.dvTCM` | TCM reserve (km/s) |
+| `result.details.C3` | Departure characteristic energy (km²/s²) |
+| `result.legs(i)` | Per-leg Lambert solution (r, v vectors, v∞ in/out) |
+| `result.flybys(j)` | Per-flyby geometry (deflection, periapsis, feasibility, dvPowered) |
+
+### Flyby physics
+
+At each intermediate body the incoming and outgoing v∞ vectors come directly from the adjacent Lambert solutions.
+
+**Free gravity assist** (`|v∞_in| = |v∞_out|`):
+
+sin(δ/2) = 1 / (1 + r_p · v∞² / μ) → r_p = (μ/v∞²) · (1/sin(δ/2) − 1)
+
+**Powered flyby** (`|v∞_in| ≠ |v∞_out|`) — ΔV applied at periapsis via Oberth effect:
+
+ΔV = |√(v∞_out² + 2μ/r_p) − √(v∞_in² + 2μ/r_p)|
+
+Savings from gravity assists grow with the flyby body's mass and with higher incoming v∞.  For inner-planet assists (Venus, Earth) the deflection angle is large but the speed boost is modest; for Jupiter flybys the speed change can exceed several km/s.
 
 ---
 
