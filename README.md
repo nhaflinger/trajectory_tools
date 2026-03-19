@@ -112,6 +112,44 @@ When `departureJD` and `tofDays` are provided the solver uses true eccentric pla
 
 ---
 
+## Lunar Transfer Options
+
+`patchedConicTransfer(Earth, Moon, options)` accepts:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `departureAltitude` | 200 km | LEO parking orbit altitude |
+| `arrivalAltitude` | 200 km | Perilune altitude of capture orbit |
+| `arrivalApogeeAltitude` | = `arrivalAltitude` | Apolune altitude; set higher for elliptical capture |
+| `departureInclination` | 0° | Parking orbit inclination relative to transfer plane — drives plane-change ΔV at TLI |
+| `arrivalInclination` | 0° | Capture orbit inclination relative to lunar equator |
+| `arrivalArgOfPeriapsis` | 0° | Argument of periapsis of capture orbit (90° = perilune above north pole) |
+| `transferMode` | `'direct'` | `'direct'` combined LOI + plane change; `'biElliptic'` three-burn sequence |
+| `biEllipticApoapsisAltitude` | 0 (Moon SOI) | Intermediate apoapsis altitude for bi-elliptic mode; 0 uses Moon's SOI for maximum savings |
+
+### Output fields (lunar — direct)
+
+| Field | Description |
+|-------|-------------|
+| `result.deltaV` | Total ΔV: TLI + capture (km/s) |
+| `result.tof` | Transfer time of flight — half the ellipse period (s) |
+| `result.details.dvTLI` | Trans-lunar injection ΔV including departure plane change (km/s) |
+| `result.details.dvCapture` | Lunar orbit insertion ΔV including arrival plane change (km/s) |
+| `result.details.vInf` | Hyperbolic excess speed at Moon SOI (km/s) |
+| `result.details.transferSemiMajor` | TLI transfer ellipse semi-major axis (km) |
+| `result.details.r0` | Departure parking orbit radius (km) |
+
+### Output fields (lunar — bi-elliptic, additional fields)
+
+| Field | Description |
+|-------|-------------|
+| `result.details.dvLOI` | Burn 1 — hyperbola → equatorial ellipse at perilune, no plane change (km/s) |
+| `result.details.dvPlaneChange` | Burn 2 — pure plane change at intermediate apolune (km/s) |
+| `result.details.dvApoapsisTrim` | Burn 3 — trim apoapsis from intermediate to final value (km/s) |
+| `result.details.rBiEllipticApoapsis` | Intermediate apoapsis radius used for plane change (km) |
+
+---
+
 ## Lambert Solver
 
 `lambertSolver(r1, r2, tof, mu)` implements the universal-variable method from Bate, Mueller & White (1971, §5.3):
@@ -159,6 +197,8 @@ Savings grow monotonically with the intermediate apoapsis. At the Moon's SOI (~6
 - **Capture orbit:** 100 × 5 000 km polar ellipse, ω = 90°
   - Perilune above north pole — descent approach targets the south pole
   - High apolune reduces orbital maintenance ΔV and extends south-pole communications geometry
+- Reports transfer orbit parameters (a, e, period), v∞ at Moon SOI, and approach speed at perilune for both modes
+- TCM budget (2% of TLI ΔV, minimum 10 m/s) included in both the comparison table and the bar chart
 - Compares direct and bi-elliptic transfers with a full ΔV breakdown and 3D plots showing all intermediate orbits
 
 ---
