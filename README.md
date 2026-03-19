@@ -56,7 +56,8 @@ Key capabilities:
 | `example_lunar_transfer.m` | Basic Earth–Moon transfer example |
 | `example_lunar_south_pole.m` | South-pole mission: direct vs bi-elliptic polar capture comparison |
 | `example_interplanetary_transfer.m` | Earth–Mars transfer with Lambert solver and pork-chop plot |
-| `example_gravity_assist.m` | Earth–Venus–Jupiter gravity-assist trajectory with direct comparison |
+| `example_evj.m` | Earth–Venus–Jupiter gravity-assist trajectory with direct EJ comparison |
+| `example_emej_europa_clipper.m` | Europa Clipper-style EMEJ trajectory (MEGA: Mars + Earth flybys) with direct EJ comparison |
 
 ---
 
@@ -68,7 +69,8 @@ Open MATLAB, add the repository folder to your path, then run any example script
 run('example_interplanetary_transfer.m')
 run('example_lunar_south_pole.m')
 run('example_lunar_transfer.m')
-run('example_gravity_assist.m')
+run('example_evj.m')
+run('example_emej_europa_clipper.m')
 ```
 
 ---

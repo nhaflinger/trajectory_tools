@@ -216,7 +216,13 @@ v_hyp_dep = sqrt(v_inf_dep^2 + 2*departBody.mu/r_park);
 dv_dep    = combinedBurnDV(v_park, v_hyp_dep, options.departureInclination);
 
 r_cap     = arrivalBody.radius + options.arrivalAltitude;
-v_cap     = sqrt(arrivalBody.mu / r_cap);
+r_apo_arr = arrivalBody.radius + options.arrivalApogeeAltitude;
+if r_apo_arr > r_cap
+    a_cap = (r_cap + r_apo_arr) / 2;
+    v_cap = sqrt(2*arrivalBody.mu/r_cap - arrivalBody.mu/a_cap);
+else
+    v_cap = sqrt(arrivalBody.mu / r_cap);
+end
 v_hyp_arr = sqrt(v_inf_arr^2 + 2*arrivalBody.mu/r_cap);
 dv_arr    = combinedBurnDV(v_hyp_arr, v_cap, options.arrivalInclination);
 

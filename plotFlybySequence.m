@@ -73,11 +73,19 @@ for i = 1:nLegs
 
     % Active Lambert arc
     [xa, ya, za] = transferArc3D(leg.r1_vec, leg.v1_transfer, leg.r2_vec, muSun);
-    legHandles(i) = plot3(ax, xa, ya, za, '-', 'Color', col, 'LineWidth', 2.0);
+    if ~isempty(xa)
+        legHandles(i) = plot3(ax, xa, ya, za, '-', 'Color', col, 'LineWidth', 2.0);
+    else
+        legHandles(i) = plot3(ax, NaN, NaN, NaN, '-', 'Color', col, 'LineWidth', 2.0);
+    end
 
-    % Full transfer ellipse (dashed)
+    % Full transfer ellipse (dashed) — skip near-parabolic orbits whose
+    % huge apoapsis would blow up the plot scale.
     [xf, yf, zf] = fullOrbitTrace(leg.r1_vec, leg.v1_transfer, muSun);
-    plot3(ax, xf, yf, zf, '--', 'Color', [col 0.25], 'LineWidth', 0.8);
+    if ~isempty(xf)
+        plot3(ax, xf, yf, zf, '--', 'Color', [col 0.25], 'LineWidth', 0.8);
+    end
+
 end
 
 % --- Body positions at encounter ---
@@ -163,6 +171,15 @@ annotation(fig, 'textbox', [0.01 0.01 0.30 0.40], ...
     'Color', [0.85 0.85 0.90], 'FitBoxToText', true, 'Interpreter', 'none');
 
 view(ax, 25, 28);
+
+% Clamp axis limits to the outermost body orbit so a near-parabolic
+% transfer arc doesn't collapse everything else to a speck.
+if rMax > 0
+    lim = rMax * 1.25;
+    xlim(ax, [-lim lim]);
+    ylim(ax, [-lim lim]);
+    zlim(ax, [-lim*0.3 lim*0.3]);
+end
 end
 
 % =========================================================================
@@ -211,16 +228,19 @@ end
 
 % -------------------------------------------------------------------------
 function [x, y, z] = fullOrbitTrace(r_vec, v_vec, mu)
+x = []; y = []; z = [];
 r_vec = r_vec(:);  v_vec = v_vec(:);
 R1    = norm(r_vec);
 h_vec = cross(r_vec, v_vec);
 e_vec = cross(v_vec, h_vec)/mu - r_vec/R1;
 e     = norm(e_vec);
+if e >= 0.95, return; end         % skip near-parabolic/hyperbolic orbits
 if e > 1e-8, P_hat = e_vec/e; else, P_hat = r_vec/R1; end
 W_hat = h_vec / norm(h_vec);
 Q_hat = cross(W_hat, P_hat);
 a_t   = 1 / (2/R1 - dot(v_vec,v_vec)/mu);
 p_t   = a_t * (1 - e^2);
+if p_t <= 0, return; end
 nu    = linspace(0, 2*pi, 360);
 r     = p_t ./ (1 + e*cos(nu));
 x = r .* (P_hat(1)*cos(nu) + Q_hat(1)*sin(nu));
@@ -230,16 +250,19 @@ end
 
 % -------------------------------------------------------------------------
 function [x, y, z] = transferArc3D(r1_vec, v1_vec, r2_vec, mu)
+x = []; y = []; z = [];
 r1_vec = r1_vec(:);  v1_vec = v1_vec(:);  r2_vec = r2_vec(:);
 R1    = norm(r1_vec);
 h_vec = cross(r1_vec, v1_vec);
 e_vec = cross(v1_vec, h_vec)/mu - r1_vec/R1;
 e     = norm(e_vec);
+if e >= 1.0, return; end          % skip non-elliptic legs
 if e > 1e-8, P_hat = e_vec/e; else, P_hat = r1_vec/R1; end
 W_hat = h_vec / norm(h_vec);
 Q_hat = cross(W_hat, P_hat);
 a_t   = 1 / (2/R1 - dot(v1_vec,v1_vec)/mu);
 p_t   = a_t * (1 - e^2);
+if p_t <= 0, return; end
 nu1   = atan2(dot(r1_vec, Q_hat), dot(r1_vec, P_hat));
 nu2   = atan2(dot(r2_vec, Q_hat), dot(r2_vec, P_hat));
 if nu2 <= nu1, nu2 = nu2 + 2*pi; end
