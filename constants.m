@@ -44,6 +44,17 @@ SSBodies.Moon = struct('name', 'Moon', ...
                         'obliquity', 6.68); % deg axial tilt to lunar orbital plane
 
 %% Planets — J2000 Keplerian elements (Standish 1992, valid 1800-2050)
+SSBodies.Mercury = struct('name', 'Mercury', ...
+                           'mu', 22031.86, ... % km^3/s^2
+                           'radius', 2439.7, ... % km mean
+                           'a', 0.38709893 * SSBodies.Constants.AU, ...
+                           'e', 0.20563069, ...
+                           'inclination', 7.00487, ... % deg w.r.t. ecliptic
+                           'Omega',       48.33167, ... % deg, J2000
+                           'omega_peri',  29.12478, ... % deg, J2000
+                           'M0',         174.79439, ... % deg, J2000
+                           'obliquity', 0.034);
+
 SSBodies.Mars = struct('name', 'Mars', ...
                         'mu', 4.282837e4, ... % km^3/s^2
                         'radius', 3389.5, ... % km mean

@@ -657,6 +657,7 @@ end
 % -------------------------------------------------------------------------
 function col = bodyColor(name)
 switch lower(name)
+    case 'mercury',  col = [0.60 0.58 0.55];
     case 'earth',    col = [0.20 0.45 0.75];
     case 'mars',     col = [0.72 0.28 0.18];
     case 'moon',     col = [0.72 0.72 0.72];

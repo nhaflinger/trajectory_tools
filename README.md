@@ -66,8 +66,9 @@ run('example_lunar_transfer.m')
 |------|---------------|---|-----|
 | Earth | J2000 (eccentric + inclined) | 398 600 km³/s² | — |
 | Moon | circular (geocentric) | 4 903 km³/s² | ~66 200 km |
-| Mars | J2000 (e = 0.093, i = 1.85°) | 42 828 km³/s² | ~577 000 km |
+| Mercury | J2000 (e = 0.206, i = 7.0°) | 22 032 km³/s² | — |
 | Venus | J2000 | 324 859 km³/s² | — |
+| Mars | J2000 (e = 0.093, i = 1.85°) | 42 828 km³/s² | ~577 000 km |
 | Jupiter | J2000 | 1.267 × 10⁸ km³/s² | — |
 | Saturn | J2000 | 3.793 × 10⁷ km³/s² | — |
 | Uranus | J2000 | 5.794 × 10⁶ km³/s² | — |
