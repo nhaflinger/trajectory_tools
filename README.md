@@ -75,6 +75,7 @@ run('example_lunar_south_pole.m')
 run('example_lunar_transfer.m')
 run('example_evj.m')
 run('example_emej_europa_clipper.m')
+run('example_ga_explorer.m')   % multi-architecture E→J comparison
 ```
 
 ---
@@ -227,6 +228,58 @@ Savings grow monotonically with the intermediate apoapsis. At the Moon's SOI (~6
 
 ## Gravity Assist Design
 
+### Design workflow
+
+The three analysis tools are meant to be used together in sequence, moving from broad topology to refined trajectory:
+
+**1. Establish the design space — `tisserandGraph` + `resonantOrbits`**
+
+Before running any optimization, generate the Tisserand graph for your flyby bodies to understand what gravity-assist architectures are geometrically possible. Add resonant-orbit markers to identify where repeat flybys are accessible.
+
+```matlab
+bodies = constants();
+[fig, ax] = tisserandGraph({bodies.Venus, bodies.Earth, bodies.Jupiter});
+resonantOrbits(bodies.Venus, 'ax', ax, 'print', false);
+resonantOrbits(bodies.Earth, 'ax', ax, 'print', false);
+```
+
+Read the graph to identify candidate sequences: a good sequence is one where each flyby body's contours lie between the departure orbit and the destination, allowing the spacecraft to climb from one to the other with minimal powered burns.
+
+**2. Scan candidate windows — `porkChopSequence`**
+
+For each candidate sequence, generate per-leg pork-chop plots to see when good opportunities exist. Each subplot shows v∞ at arrival for one leg; compatible windows appear where the v∞ at the end of leg i matches the v∞ at the start of leg i+1.
+
+```matlab
+bSeq      = {bodies.Earth, bodies.Venus, bodies.Jupiter};
+tofRanges = [100, 250; 600, 1200];
+best      = findBestFlybyWindow(bSeq, jdStart, jdEnd, tofRanges);
+porkChopSequence(bSeq, jdStart, jdEnd, tofRanges, struct('markBest', best));
+```
+
+The ★ marker shows the grid-search optimum. Use the plots to check whether the optimum sits in an isolated minimum-energy island (robust window) or on a broad shallow slope (sensitive to timing errors).
+
+**3. Compute and compare — `flybySequence` + Tisserand overlay**
+
+Compute the full trajectory at the best window and overlay it on the Tisserand graph to verify the gravity assists are doing the expected work.
+
+```matlab
+result = flybySequence(bSeq, best.departureJD, best.tofDays, seqOpts);
+tisserandGraph({bodies.Venus, bodies.Earth, bodies.Jupiter}, ...
+    struct('trajectory', result));
+```
+
+Check that consecutive leg-orbit points sit on the same v∞ contour of each flyby body — this confirms the gravity assist is free (no powered flyby burn required).
+
+**4. Compare architectures — `example_ga_explorer.m`**
+
+Run the explorer script to evaluate multiple sequences side by side and identify which architecture best suits your mission's ΔV and TOF requirements:
+
+```matlab
+run('example_ga_explorer.m')
+```
+
+---
+
 ### Quick start
 
 ```matlab
@@ -279,10 +332,8 @@ plotFlybySequence(result, bSeq);
 ```matlab
 bodies = constants();
 bSeq   = {bodies.Earth, bodies.Mars, bodies.Jupiter};
-fig    = tisserandGraph(bSeq);
+[fig, ax] = tisserandGraph(bSeq);
 ```
-
-**Reading the graph:**  Each body produces a family of nested curves.  A point `(r_p, r_a)` on the graph represents a heliocentric orbit that crosses that body's orbital distance.  A **free gravity assist** moves the spacecraft along one body's contour (v∞ magnitude conserved, direction deflected).  A **deep-space manoeuvre** moves it to a different contour.
 
 To overlay a computed flyby sequence on the graph:
 
@@ -290,6 +341,62 @@ To overlay a computed flyby sequence on the graph:
 result = flybySequence(bSeq, departJD, tofDays);
 tisserandGraph(bSeq, struct('trajectory', result));
 ```
+
+### Interpreting the Tisserand Graph
+
+**The axes**
+
+Each point `(r_p, r_a)` on the graph represents a class of heliocentric orbits — all ellipses with that periapsis and apoapsis distance, regardless of orientation. The dashed diagonal `r_p = r_a` is the circular-orbit locus; planets sit on it as dots.
+
+**The contour lines**
+
+For each body, the colored contour families show all heliocentric orbits that encounter that body with a given v∞. The contour values come from the Tisserand parameter:
+
+```
+T    = a_planet/a_spacecraft + 2·√((a_sc/a_planet)·(1−e²))
+v∞   = v_planet · √(3 − T)
+```
+
+A contour labeled `2 km/s` for Earth means: any spacecraft on an orbit touching that line arrives at Earth with exactly 2 km/s hyperbolic excess speed. Lower-numbered contours (closer to each planet's dot) correspond to more efficient, lower-energy encounters.
+
+**The key insight: gravity assists move you along a contour**
+
+When the spacecraft flies by a planet with no thrust:
+- The v∞ **magnitude** is conserved
+- The **direction** changes, reshaping the heliocentric orbit
+- On the Tisserand graph this appears as **sliding along that planet's contour** to a new `(r_p, r_a)` point
+
+A **powered flyby** (burn at periapsis via Oberth effect) lets you jump between contours of the same body at the cost of some ΔV, applied at maximum speed.
+
+**Reading a trajectory sequence**
+
+Each leg's transfer ellipse maps to one point `(r_p, r_a)`. The trajectory overlaid by `example_ga_explorer.m` appears as a dashed colored path through the graph:
+
+```
+Leg 1 point  →  flyby at planet X  →  Leg 2 point  →  flyby at planet Y  →  ...
+```
+
+At each flyby, the jump from one leg's point to the next **should lie along that planet's v∞ contour**. If both points fall on the same contour value → the gravity assist is free. If they fall on different contours → a powered flyby burn was required.
+
+**Reaching a distant destination efficiently** means climbing the `r_a` axis with as little ΔV as possible. A well-designed gravity-assist sequence looks like:
+
+1. Depart the inner planet with modest v∞ (dot near departure body's line, modest `r_a`)
+2. Each flyby slides the dot along a contour, raising `r_a` toward the destination
+3. The final dot lands on a low v∞ contour of the destination → small arrival burn
+
+**What to look for**
+
+| You observe... | It means... |
+|----------------|-------------|
+| Two consecutive trajectory dots on the same body's contour | Free gravity assist — no ΔV spent |
+| Dots on widely separated contours of the flyby body | Powered flyby needed, or poor sequence choice |
+| Path climbing smoothly up the `r_a` axis | Each assist efficiently raises the apoapsis toward the target |
+| Final dot on a low-numbered destination contour | Low arrival v∞ → small capture burn |
+| × marker near a trajectory dot | A repeat flyby at that body is geometrically accessible |
+
+**Resonant × markers**
+
+The `×` symbols placed by `resonantOrbits` mark specific `(r_p, r_a)` points where the spacecraft's orbital period is a simple integer ratio p:q of the flyby planet's period. After the flyby the spacecraft completes p revolutions, the planet completes q, and they meet again at the same point — enabling a second flyby with no extra targeting. These are the anchor points for v∞ leveraging (VILT) strategies.
 
 ### `tisserandGraph` options
 
