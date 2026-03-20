@@ -71,7 +71,6 @@ text(ax, r_d(lbl_idx)*1.01, r_d(lbl_idx)*1.06, 'circular', ...
     'HorizontalAlignment','center');
 
 % ---- v∞ contours per body ----
-legHandles = gobjects(N,1);
 for i = 1:N
     b    = bodies{i};
     a_p  = b.a;               % km
@@ -93,14 +92,16 @@ for i = 1:N
 
     [C,h] = contour(ax, rpVec, raVec, vInf, options.vInfValues, ...
         'Color',col,'LineWidth',1.1);
+    h.HandleVisibility = 'off';   % managed in explicit legend below
     if options.showLabels && ~isempty(C)
         clabel(C, h, options.vInfValues, 'FontSize',6.5, 'Color',col, ...
             'LabelSpacing',300);
     end
 
-    % Planet marker
-    legHandles(i) = plot(ax, a_pAU, a_pAU, 'o', 'MarkerSize',9, ...
-        'MarkerFaceColor',col, 'MarkerEdgeColor','w', 'LineWidth',0.8);
+    % Planet marker (circular orbit: rp = ra = a_planet)
+    plot(ax, a_pAU, a_pAU, 'o', 'MarkerSize',9, ...
+        'MarkerFaceColor',col, 'MarkerEdgeColor','w', 'LineWidth',0.8, ...
+        'HandleVisibility','off');
     text(ax, a_pAU*1.03, a_pAU*1.07, ['  ' b.name], ...
         'Color',col,'FontSize',9,'FontWeight','bold');
 end
@@ -113,9 +114,46 @@ end
 xlim(ax, options.rpLim);
 ylim(ax, options.raLim);
 
-legend(ax, legHandles(1:N), cellfun(@(b) b.name, bodies,'UniformOutput',false), ...
-    'Location','northwest','TextColor',[0.85 0.85 0.85], ...
-    'Color',[0.10 0.10 0.15],'EdgeColor',[0.4 0.4 0.4],'FontSize',8);
+% ---- legend ----
+% Collect explicit handles so every symbol type is explained.
+legH   = {};
+legTxt = {};
+
+% Per-body: filled dot on a line represents planet position + v∞ contours
+for i = 1:N
+    col = bodyColor(bodies{i}.name);
+    h = plot(ax, NaN, NaN, 'o-', 'Color',col, ...
+        'MarkerFaceColor',col, 'MarkerEdgeColor','w', ...
+        'MarkerSize',7, 'LineWidth',1.2);
+    legH{end+1}   = h;                                          %#ok<AGROW>
+    legTxt{end+1} = sprintf('%s  — planet (●) & v∞ contours', bodies{i}.name); %#ok<AGROW>
+end
+
+% Circular orbit locus (diagonal r_p = r_a)
+h_circ = plot(ax, NaN, NaN, '--', 'Color',[0.5 0.5 0.6], 'LineWidth',0.8);
+legH{end+1}   = h_circ;
+legTxt{end+1} = 'Circular orbit  (r_p = r_a)';
+
+% Resonant return orbits — × markers added by resonantOrbits(body, ''ax'', ax)
+h_res = plot(ax, NaN, NaN, 'x', 'Color',[0.60 0.60 0.65], ...
+    'MarkerSize',9, 'LineWidth',1.8);
+legH{end+1}   = h_res;
+legTxt{end+1} = '× p:q resonant return orbit  (label: ratio, min v∞)';
+
+% Trajectory overlay entries (if a flybySequence result was supplied)
+if isfield(options,'trajectory')
+    h_path = plot(ax, NaN, NaN, 'w--', 'LineWidth',1.2);
+    h_dot  = plot(ax, NaN, NaN, 'o', 'MarkerFaceColor',[0.55 0.55 0.55], ...
+        'MarkerEdgeColor','w', 'MarkerSize',8, 'LineWidth',0.8);
+    legH{end+1}   = h_path;
+    legTxt{end+1} = 'Trajectory sequence path';
+    legH{end+1}   = h_dot;
+    legTxt{end+1} = 'L#  Transfer-leg orbit (r_p, r_a)';
+end
+
+legend(ax, [legH{:}], legTxt, 'Location','northwest', ...
+    'TextColor',[0.85 0.85 0.85], 'Color',[0.10 0.10 0.15], ...
+    'EdgeColor',[0.4 0.4 0.4], 'FontSize',8);
 end
 
 % =========================================================================

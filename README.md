@@ -409,6 +409,44 @@ The `×` symbols placed by `resonantOrbits` mark specific `(r_p, r_a)` points wh
 | `trajectory` | — | `flybySequence` result to overlay |
 | `showLabels` | `true` | Label contour v∞ values |
 
+### Legend guide
+
+| Symbol | Meaning |
+|--------|---------|
+| ● colored dot | Planet location on its circular orbit |
+| — colored line (labeled) | Iso-v∞ contour — the number is v∞ in km/s |
+| × colored mark | p:q resonant return orbit — label gives the ratio and minimum v∞ |
+| white dashed path | Trajectory sequence connecting leg-orbit points |
+| ○ numbered dot (L1, L2, …) | Transfer-leg orbit position in (r_p, r_a) space |
+| diagonal dashed line | Circular orbit locus (r_p = r_a) — planets sit on this line |
+
+**Reading a flyby:** at each intermediate body, the jump from one L# dot to the next should lie on one of that body's contours at the same labeled v∞ value.  If both dots are on the same contour → free gravity assist.  If they are on different contours → powered flyby ΔV was required.
+
+### Other Tisserand graph variants
+
+The `(r_p, r_a)` graph implemented here is the most common form for trajectory topology, but several other projections are used in mission design, each optimized for a different question:
+
+**v∞ vs. orbital period (period-Tisserand)**
+
+X-axis: v∞ at the flyby body (km/s); Y-axis: spacecraft orbital period (years).  As v∞ increases, a wider range of periods becomes accessible from a flyby of that body.  The key advantage of this projection is that **resonant orbits appear as horizontal lines** at exact period ratios — 1 yr, 2 yr, 1.5 yr, etc. — making v∞ leveraging (VILT) chains immediately visible.  Used extensively in designing repeated flyby sequences around the outer planets.
+
+**v∞ vs. semi-major axis (energy Tisserand)**
+
+X-axis: v∞ at the flyby body (km/s); Y-axis: spacecraft semi-major axis (AU).  Equivalent to the period version via Kepler's third law.  Shows directly how the accessible semi-major axis range expands with increasing v∞, useful for bounding the ΔV required to reach a target orbit from a given flyby speed.
+
+**Linked v∞ graph (bi-body or Tisserand-Poincaré graph)**
+
+X-axis: v∞ at body 1 (km/s); Y-axis: v∞ at body 2 (km/s).  For a trajectory that encounters both bodies, each heliocentric transfer ellipse maps to a curve in this space.  A flyby at body 1 moves the spacecraft along a **vertical line** (v∞₁ conserved, orbit reshapes); a flyby at body 2 moves it along a **horizontal line** (v∞₂ conserved).  The intersection of curves from two different bodies shows which (v∞₁, v∞₂) pairs are achievable from the same ellipse — directly identifying free-gravity-assist connections.  This is the standard graph for designing multi-body VILT chains (Campagnola & Russell 2010).
+
+**Choosing a projection**
+
+| Question | Best graph |
+|----------|-----------|
+| What flyby sequences are geometrically possible? | r_p vs. r_a (this implementation) |
+| Where are the resonant return windows? | v∞ vs. period (period-Tisserand) |
+| Can I connect two bodies with a free gravity assist? | v∞₁ vs. v∞₂ (bi-body / linked graph) |
+| How much does a flyby change my orbital energy? | v∞ vs. semi-major axis (energy-Tisserand) |
+
 ---
 
 ## Resonant Orbit Analysis
