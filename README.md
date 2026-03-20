@@ -52,12 +52,16 @@ Key capabilities:
 | `flybySequence.m` | Multi-leg Lambert chaining with gravity-assist analysis at each flyby body |
 | `findBestFlybyWindow.m` | Grid search for minimum-ΔV gravity-assist launch window |
 | `plotFlybySequence.m` | 3D heliocentric visualization of multi-leg gravity-assist trajectories |
+| `tisserandGraph.m` | Tisserand parameter graph — iso-v∞ contours per body on the (r_p, r_a) plane |
+| `porkChopSequence.m` | Per-leg pork-chop plots for a multi-body flyby sequence |
+| `resonantOrbits.m` | Resonant return-orbit analysis: period ratios, min v∞, apsis distances |
 | `julianDate.m` | Gregorian → Julian Date conversion |
 | `example_lunar_transfer.m` | Basic Earth–Moon transfer example |
 | `example_lunar_south_pole.m` | South-pole mission: direct vs bi-elliptic polar capture comparison |
 | `example_interplanetary_transfer.m` | Earth–Mars transfer with Lambert solver and pork-chop plot |
 | `example_evj.m` | Earth–Venus–Jupiter gravity-assist trajectory with direct EJ comparison |
 | `example_emej_europa_clipper.m` | Europa Clipper-style EMEJ trajectory (MEGA: Mars + Earth flybys) with direct EJ comparison |
+| `example_ga_explorer.m` | Gravity-assist scenario explorer: compares six E→J flyby architectures using all three new tools |
 
 ---
 
@@ -265,6 +269,108 @@ plotFlybySequence(result, bSeq);
 | `result.details.C3` | Departure characteristic energy (km²/s²) |
 | `result.legs(i)` | Per-leg Lambert solution (r, v vectors, v∞ in/out) |
 | `result.flybys(j)` | Per-flyby geometry (deflection, periapsis, feasibility, dvPowered) |
+
+---
+
+## Tisserand Graph
+
+`tisserandGraph(bodies)` plots iso-v∞ contours for each body in the `(r_p, r_a)` plane (periapsis vs. apoapsis distance in AU).
+
+```matlab
+bodies = constants();
+bSeq   = {bodies.Earth, bodies.Mars, bodies.Jupiter};
+fig    = tisserandGraph(bSeq);
+```
+
+**Reading the graph:**  Each body produces a family of nested curves.  A point `(r_p, r_a)` on the graph represents a heliocentric orbit that crosses that body's orbital distance.  A **free gravity assist** moves the spacecraft along one body's contour (v∞ magnitude conserved, direction deflected).  A **deep-space manoeuvre** moves it to a different contour.
+
+To overlay a computed flyby sequence on the graph:
+
+```matlab
+result = flybySequence(bSeq, departJD, tofDays);
+tisserandGraph(bSeq, struct('trajectory', result));
+```
+
+### `tisserandGraph` options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `vInfValues` | `[0.5 1 2 3 5 10 20]` | v∞ contour levels (km/s) |
+| `nGrid` | `400` | Grid resolution |
+| `rpLim` | auto | Periapsis range `[min max]` AU |
+| `raLim` | auto | Apoapsis range `[min max]` AU |
+| `trajectory` | — | `flybySequence` result to overlay |
+| `showLabels` | `true` | Label contour v∞ values |
+
+---
+
+## Resonant Orbit Analysis
+
+`resonantOrbits(body)` enumerates p:q resonant return orbits for a flyby planet — the set of heliocentric orbits that return the spacecraft to the planet after exactly p spacecraft revolutions per q planet revolutions.
+
+```matlab
+bodies = constants();
+resonantOrbits(bodies.Earth);               % print table
+resonantOrbits(bodies.Mars);
+
+% Overlay on a Tisserand graph
+fig = tisserandGraph({bodies.Earth, bodies.Mars, bodies.Jupiter});
+resonantOrbits(bodies.Earth, 'ax', gca);
+resonantOrbits(bodies.Mars,  'ax', gca);
+```
+
+**Physics:**  For resonance p:q, the spacecraft semi-major axis is `a_sc = a_p·(q/p)^(2/3)`.  The minimum v∞ at a tangent (minimum-energy) encounter is:
+
+```
+v∞_min = v_p · |√(2 − a_p/a_sc) − 1|
+```
+
+Outward resonances (`a_sc > a_p`) have periapsis at the planet; inward resonances (`a_sc < a_p`) have apoapsis at the planet.
+
+### `resonantOrbits` options
+
+| Option / name-value | Default | Description |
+|---------------------|---------|-------------|
+| `maxN` | `5` | Maximum integer in p and q |
+| `ax` | — | Axes handle — marks resonances on Tisserand graph |
+| `print` | `true` | Print summary table |
+
+---
+
+## Per-Leg Pork-Chop Sequence
+
+`porkChopSequence(bodies, jdStart, jdEnd, tofRanges)` creates one pork-chop subplot per leg showing v∞ at arrival as a function of departure date and TOF.  The departure window for leg i is automatically offset from `jdStart/jdEnd` by the accumulated minimum TOF of the preceding legs.
+
+```matlab
+bodies = constants();
+bSeq   = {bodies.Earth, bodies.Venus, bodies.Jupiter};
+
+jdStart   = julianDate(2026, 1, 1);
+jdEnd     = julianDate(2030, 12, 31);
+tofRanges = [100, 250;    % leg 1: E→V
+             600, 1200];  % leg 2: V→J
+
+porkChopSequence(bSeq, jdStart, jdEnd, tofRanges);
+```
+
+To mark the optimum from `findBestFlybyWindow`:
+
+```matlab
+best = findBestFlybyWindow(bSeq, jdStart, jdEnd, tofRanges);
+porkChopSequence(bSeq, jdStart, jdEnd, tofRanges, struct('markBest', best));
+```
+
+### `porkChopSequence` options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `nDep` | `60` | Departure-date grid points per leg |
+| `nTof` | `60` | TOF grid points per leg |
+| `transferTypes` | `'type1'` each | Per-leg `'type1'` or `'type2'` |
+| `markBest` | — | Struct `.departureJD` + `.tofDays` to mark ★ |
+| `cLimPct` | `[5 85]` | Colorscale percentile clamp |
+
+---
 
 ### Flyby physics
 
