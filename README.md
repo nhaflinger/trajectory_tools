@@ -55,6 +55,10 @@ Key capabilities:
 | `tisserandGraph.m` | Tisserand parameter graph — iso-v∞ contours per body on the (r_p, r_a) plane |
 | `porkChopSequence.m` | Per-leg pork-chop plots for a multi-body flyby sequence |
 | `resonantOrbits.m` | Resonant return-orbit analysis: period ratios, min v∞, apsis distances |
+| `lowThrustSpiral.m` | Edelbaum analytical ΔV + tangential-thrust RK4 spiral with propellant accounting |
+| `plotLowThrustSpiral.m` | Spiral visualization: trajectory, altitude profile, and mass history |
+| `lowThrustInterplanetary.m` | Three-phase low-thrust interplanetary budget: departure spiral + heliocentric + arrival capture |
+| `porkChopLowThrust.m` | Low-thrust pork-chop: propellant fraction vs. launch date/TOF with impulsive overlay |
 | `julianDate.m` | Gregorian → Julian Date conversion |
 | `example_lunar_transfer.m` | Basic Earth–Moon transfer example |
 | `example_lunar_south_pole.m` | South-pole mission: direct vs bi-elliptic polar capture comparison |
@@ -62,6 +66,8 @@ Key capabilities:
 | `example_evj.m` | Earth–Venus–Jupiter gravity-assist trajectory with direct EJ comparison |
 | `example_emej_europa_clipper.m` | Europa Clipper-style EMEJ trajectory (MEGA: Mars + Earth flybys) with direct EJ comparison |
 | `example_ga_explorer.m` | Gravity-assist scenario explorer: compares six E→J flyby architectures using all three new tools |
+| `example_low_thrust.m` | Low-thrust orbit transfer examples: LEO→GEO, LEO→lunar distance, propulsion trade study |
+| `example_low_thrust_interplanetary.m` | Three-phase Earth→Mars low-thrust budget, impulsive comparison, and launch-window pork-chop |
 
 ---
 
@@ -76,6 +82,7 @@ run('example_lunar_transfer.m')
 run('example_evj.m')
 run('example_emej_europa_clipper.m')
 run('example_ga_explorer.m')   % multi-architecture E→J comparison
+run('example_low_thrust.m')   % low-thrust spiral transfers and propulsion trade study
 ```
 
 ---
@@ -530,6 +537,144 @@ sin(δ/2) = 1 / (1 + r_p · v∞² / μ) → r_p = (μ/v∞²) · (1/sin(δ/2) �
 ΔV = |√(v∞_out² + 2μ/r_p) − √(v∞_in² + 2μ/r_p)|
 
 Savings from gravity assists grow with the flyby body's mass and with higher incoming v∞.  For inner-planet assists (Venus, Earth) the deflection angle is large but the speed boost is modest; for Jupiter flybys the speed change can exceed several km/s.
+
+---
+
+## Low-Thrust Spiral Transfers
+
+`lowThrustSpiral(body, r0_km, r1_km)` computes the ΔV and propellant budget for a continuous low-thrust transfer between two circular orbits.
+
+```matlab
+bodies = constants();
+
+% LEO -> GEO with a Hall thruster (no plane change)
+opts           = struct();
+opts.thrustN   = 0.300;   % N
+opts.isp       = 1800;    % s (Hall thruster)
+opts.wetMass   = 500;     % kg
+
+res = lowThrustSpiral(bodies.Earth, ...
+    bodies.Earth.radius + 200,    ...   % 200 km LEO
+    bodies.Earth.radius + 35786,  ...   % GEO
+    opts);
+
+fprintf('dV = %.3f km/s,  TOF = %.0f days,  Prop = %.0f kg\n', ...
+    res.deltaV, res.tofDays, res.propellantMass);
+
+plotLowThrustSpiral(res, bodies.Earth);
+```
+
+### Physics
+
+**Edelbaum analytical ΔV** (1961): optimal continuous-thrust spiral between two circular orbits with simultaneous inclination change:
+
+```
+ΔV = √(v₀² + v₁² − 2·v₀·v₁·cos(π·Δi/2))
+```
+
+- `v₀`, `v₁` — circular orbital speeds at `r0`, `r1`
+- `Δi` — inclination change in **radians**
+- For `Δi = 0`: reduces to `|v₀ − v₁|` (correct result for a slow spiral)
+- For combined orbit-raising + plane change, Edelbaum distributes the plane change optimally throughout the spiral, giving **lower ΔV than a two-burn impulsive sequence** when `Δi` is large
+
+**Oberth-effect trade-off**: low-thrust spirals require *more* total ΔV than equivalent impulsive burns (the Oberth advantage of burning at maximum speed is lost), but the high Isp of electric thrusters results in far *less propellant mass* consumed.
+
+| Mission | Impulsive ΔV | Edelbaum ΔV | Note |
+|---------|-------------|-------------|------|
+| LEO→GEO, Δi=0° | 3.9 km/s | 4.7 km/s | Spiral costs +0.8 km/s |
+| LEO→GEO, Δi=28.5° | ~6.3 km/s | ~6.0 km/s | Spiral is *cheaper* — plane change advantage |
+
+**RK4 tangential-thrust propagator**: for `thrustN > 0`, the actual spiral trajectory is propagated in 2-D Cartesian coordinates with thrust always along the velocity vector (prograde for orbit-raising, retrograde for deorbit). This gives accurate trajectory geometry at low thrust-to-weight ratios.
+
+**Propellant accounting** via Tsiolkovsky: `Δm = m₀(1 − exp(−ΔV/(Isp·g₀)))`.
+
+### `lowThrustSpiral` options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `inclinationChangeDeg` | `0` | Combined inclination change (deg) — Edelbaum handles optimally |
+| `thrustN` | `0` | Engine thrust (N); `0` computes Edelbaum ΔV only (no trajectory) |
+| `isp` | `3000` | Specific impulse (s) |
+| `wetMass` | `1000` | Initial spacecraft wet mass (kg) |
+| `nStepsPerOrbit` | `50` | RK4 steps per osculating orbital period |
+| `nOutputPoints` | `2000` | Decimated trajectory output points |
+
+### Output fields
+
+| Field | Description |
+|-------|-------------|
+| `result.deltaV` | Edelbaum ΔV (km/s) |
+| `result.tof` | Estimated time of flight (s) — requires `thrustN > 0` |
+| `result.tofDays` | Same in days |
+| `result.propellantMass` | Propellant consumed (kg) |
+| `result.finalMass` | Final spacecraft dry+residual mass (kg) |
+| `result.details` | Component values: `v0`, `v1`, `r0`, `r1`, `thrust`, `isp`, `wetMass` |
+| `result.trajectory` | Decimated RK4 history: `.t` `.x` `.y` `.r` `.speed` `.mass` |
+
+---
+
+## Low-Thrust Interplanetary Transfers
+
+### Three-phase mission model
+
+`lowThrustInterplanetary(departBody, arrivalBody, departJD, tofDays)` computes the complete ΔV and propellant budget for a low-thrust interplanetary mission as three sequential Edelbaum spirals:
+
+| Phase | Transfer | Central body |
+|-------|----------|-------------|
+| 1 | Parking orbit → departure body SOI | Departure planet |
+| 2 | Heliocentric cruise (dep orbit → arr orbit) | Sun |
+| 3 | Arrival body SOI → parking orbit | Arrival planet |
+
+Mass is propagated sequentially — each phase starts with the mass remaining after the previous one.
+
+```matlab
+bodies = constants();
+opts = struct('thrustN', 0.1, 'isp', 3000, 'wetMass', 1000, ...
+              'departureAltitude', 200, 'arrivalAltitude', 400);
+
+res = lowThrustInterplanetary(bodies.Earth, bodies.Mars, ...
+          julianDate(2026,1,1), 800, opts);
+
+fprintf('Total ΔV: %.2f km/s   Propellant: %.0f kg   TOF: %.0f days\n', ...
+    res.deltaV, res.propellantMass, res.tofDays);
+```
+
+Actual planet positions (eccentric orbits) are used for the heliocentric phase, so orbital eccentricity (e.g. Mars e = 0.093) contributes to the result. The Edelbaum formula is a lower bound — it is exact for infinitely slow spirals and becomes optimistic at higher thrust-to-weight ratios where gravity losses appear.
+
+**The Oberth trade-off**: Low-thrust requires significantly more total ΔV than impulsive (the Oberth effect is lost), but the high Isp of electric thrusters means far less propellant mass:
+
+| Metric | Impulsive (Isp 450 s) | Low-thrust (Isp 3000 s) |
+|--------|----------------------|------------------------|
+| Earth→Mars ΔV | ~4.5 km/s | ~15 km/s (all three spirals) |
+| Propellant fraction | ~65% | ~40% |
+| TOF | ~300 days | ~500–900 days |
+
+### Low-thrust pork-chop
+
+`porkChopLowThrust(departBody, arrivalBody, departJD, tofDays)` sweeps a (departure date × TOF) grid and plots the propellant mass fraction for the complete three-phase mission. White dashed contours overlay the equivalent impulsive Lambert ΔV for comparison.
+
+```matlab
+depDates = linspace(julianDate(2026,1,1), julianDate(2028,12,31), 60);
+tofRange = linspace(400, 1400, 50);
+
+porkChopLowThrust(bodies.Earth, bodies.Mars, depDates, tofRange, ...
+    struct('isp', 3000, 'showImpulsive', true));
+```
+
+The launch-window structure in the low-thrust pork-chop is driven by planetary eccentricity (orbital speed varies around the orbit) and is much flatter than the impulsive equivalent — low-thrust missions are less sensitive to launch date but more sensitive to total TOF budget.
+
+### `porkChopLowThrust` options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `isp` | `3000` | Specific impulse for propellant calculation (s) |
+| `wetMass` | `1000` | Spacecraft wet mass (kg) |
+| `departureAltitude` | `200` | Departure parking orbit altitude (km) |
+| `arrivalAltitude` | `400` | Arrival parking orbit altitude (km) |
+| `colorMode` | `'propFrac'` | `'propFrac'` propellant fraction; `'deltaV'` total ΔV |
+| `cLimPct` | `[5 85]` | Colorscale percentile clamp |
+| `showImpulsive` | `true` | Overlay impulsive Lambert ΔV contours (white dashed) |
+| `impulsiveContours` | auto | ΔV levels (km/s) for the impulsive overlay |
 
 ---
 
