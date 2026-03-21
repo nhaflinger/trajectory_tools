@@ -32,7 +32,14 @@ Key capabilities:
 
 **Ephemeris**
 - Full Keplerian propagation from J2000 elements (Ω, ω, M₀) for all major bodies
+- Hyperbolic orbit propagation for interstellar/flyby objects (e > 1) via hyperbolic Kepler's equation
 - No Aerospace Toolbox required — uses JPL Standish (1992) elements
+
+**Interstellar Intercept**
+- Hyperbolic ephemeris for 1I/'Oumuamua (e = 1.2, v∞ = 26.3 km/s)
+- Jupiter flyby + solar Oberth maneuver trajectory design with thermal perihelion constraint
+- Design space scan over launch window × Jupiter flyby date
+- Oberth ΔV trade: heliocentric v∞ vs. burn size at PSP perihelion limit
 
 ---
 
@@ -58,6 +65,7 @@ Key capabilities:
 | `lowThrustSpiral.m` | Edelbaum analytical ΔV + tangential-thrust RK4 spiral with propellant accounting |
 | `plotLowThrustSpiral.m` | Spiral visualization: trajectory, altitude profile, and mass history |
 | `lowThrustInterplanetary.m` | Three-phase low-thrust interplanetary budget: departure spiral + heliocentric + arrival capture |
+| `plotLowThrustInterplanetary.m` | Four-panel trajectory visualization: heliocentric cruise, departure/arrival spirals, mass history |
 | `porkChopLowThrust.m` | Low-thrust pork-chop: propellant fraction vs. launch date/TOF with impulsive overlay |
 | `julianDate.m` | Gregorian → Julian Date conversion |
 | `example_lunar_transfer.m` | Basic Earth–Moon transfer example |
@@ -67,7 +75,9 @@ Key capabilities:
 | `example_emej_europa_clipper.m` | Europa Clipper-style EMEJ trajectory (MEGA: Mars + Earth flybys) with direct EJ comparison |
 | `example_ga_explorer.m` | Gravity-assist scenario explorer: compares six E→J flyby architectures using all three new tools |
 | `example_low_thrust.m` | Low-thrust orbit transfer examples: LEO→GEO, LEO→lunar distance, propulsion trade study |
-| `example_low_thrust_interplanetary.m` | Three-phase Earth→Mars low-thrust budget, impulsive comparison, and launch-window pork-chop |
+| `example_low_thrust_interplanetary.m` | Earth→Mars low-thrust budget (LV provides Earth escape), impulsive comparison, and pork-chop |
+| `example_dawn.m` | NASA Dawn mission reproduction: Earth→Mars flyby→Vesta→Ceres with NSTAR ion engine budget |
+| `example_oumuamua.m` | Interstellar intercept design: Earth→Jupiter flyby→Solar Oberth→1I/'Oumuamua |
 
 ---
 
@@ -81,8 +91,10 @@ run('example_lunar_south_pole.m')
 run('example_lunar_transfer.m')
 run('example_evj.m')
 run('example_emej_europa_clipper.m')
-run('example_ga_explorer.m')   % multi-architecture E→J comparison
-run('example_low_thrust.m')   % low-thrust spiral transfers and propulsion trade study
+run('example_ga_explorer.m')        % multi-architecture E→J comparison
+run('example_low_thrust.m')         % low-thrust spiral transfers and propulsion trade study
+run('example_dawn.m')               % NASA Dawn mission reproduction
+run('example_oumuamua.m')           % interstellar intercept design: Jupiter flyby + solar Oberth
 ```
 
 ---
@@ -103,8 +115,9 @@ run('example_low_thrust.m')   % low-thrust spiral transfers and propulsion trade
 | Pluto | J2000 (e = 0.249, i = 17.1°) | 870 km³/s² | — |
 | Ceres, Vesta, Pallas, Hygiea | J2000 | — | — |
 | Eris, Makemake, Haumea | J2000 (approx.) | — | — |
+| **1I/'Oumuamua** | **Hyperbolic (e = 1.2, perihelion Sep 2017)** | — | — |
 
-J2000 elements (Ω, ω, M₀) enable accurate eccentric, inclined orbit propagation without the Aerospace Toolbox.
+J2000 elements (Ω, ω, M₀) enable accurate eccentric, inclined orbit propagation without the Aerospace Toolbox. Hyperbolic bodies (e ≥ 1) use `t_peri_jd` (Julian Date of perihelion) instead of M₀ and propagate via the hyperbolic Kepler equation.
 
 ---
 
@@ -675,6 +688,73 @@ The launch-window structure in the low-thrust pork-chop is driven by planetary e
 | `cLimPct` | `[5 85]` | Colorscale percentile clamp |
 | `showImpulsive` | `true` | Overlay impulsive Lambert ΔV contours (white dashed) |
 | `impulsiveContours` | auto | ΔV levels (km/s) for the impulsive overlay |
+
+---
+
+## Interstellar Intercept: 1I/'Oumuamua
+
+`example_oumuamua.m` designs an imaginary pre-discovery mission to intercept the first known interstellar object, 1I/'Oumuamua, using a Jupiter gravity assist and solar Oberth maneuver.
+
+### Mission architecture
+
+```
+Earth departure (high C3)
+    → Jupiter gravity assist   [bend trajectory sunward, boost heliocentric speed]
+        → Solar perihelion     [Oberth kick — chemical burn at closest Sun approach]
+            → Heliocentric escape toward Oumuamua
+```
+
+### Thermal constraint — Parker Solar Probe perihelion limit
+
+The spacecraft's minimum solar distance is constrained to no closer than the Parker Solar Probe's planned final perihelion (9.86 R☉ ≈ 0.046 AU). This sets the Oberth perihelion distance and therefore the maximum achievable speed boost.
+
+### Why the Oberth effect is so powerful here
+
+At 0.046 AU the Sun's escape velocity is ~196 km/s. A spacecraft arriving from Jupiter on a diving ellipse reaches perihelion at ~195 km/s — nearly equal to escape velocity, so even a small kick ΔV produces a large increase in heliocentric v∞:
+
+```
+v∞² = (v_peri + ΔV)² − v_esc²
+```
+
+| Oberth ΔV | Post-burn heliocentric v∞ |
+|-----------|--------------------------|
+| ~0 km/s   | ~0 km/s (bound) |
+| 2 km/s    | ~20 km/s |
+| 5 km/s    | ~45 km/s |
+| 10 km/s   | ~70 km/s |
+
+Oumuamua's own heliocentric v∞ is 26.3 km/s — achievable with an Oberth burn of roughly 3–4 km/s at the PSP perihelion limit.
+
+### Design space output (3 figures)
+
+**Figure 1 — Design space scan**: three side-by-side contour plots over the (launch date 2011–2016) × (Jupiter flyby date 2012–2017) grid:
+- Launch C₃ (km²/s²)
+- Post-flyby perihelion (AU) with PSP thermal limit shown as an orange dashed contour
+- Post-Oberth heliocentric v∞ (km/s) with Oumuamua's 26.3 km/s shown as a green contour
+
+The white ★ marks the best trajectory found by the grid search (maximize v∞ subject to alignment and C₃ constraints).
+
+**Figure 2 — Oberth trade curve**: heliocentric v∞ vs. Oberth ΔV at the PSP perihelion for the best trajectory. Shows the minimum ΔV to escape the Sun and the ΔV required to match Oumuamua's speed.
+
+**Figure 3 — Solar system view**: ecliptic top-down showing:
+- Oumuamua's hyperbolic path (inbound dimmer, outbound brighter, perihelion marked)
+- Spacecraft: Earth→Jupiter Lambert arc, Jupiter→perihelion dashed arc, post-Oberth escape arrow
+- PSP perihelion constraint circle, Sun, planet orbit traces, key date labels
+
+### Hyperbolic ephemeris extension
+
+`orbitalState.m` was extended to support hyperbolic bodies (e ≥ 1). Add any hyperbolic flyby object to `constants.m` with these fields:
+
+```matlab
+body.a          = -q / (e - 1);   % km, negative by convention
+body.e          = 1.xxxxx;        % eccentricity > 1
+body.inclination = ...;           % deg, ecliptic J2000
+body.Omega       = ...;           % deg
+body.omega_peri  = ...;           % deg
+body.t_peri_jd   = ...;           % Julian Date of perihelion passage
+```
+
+The propagator solves `M_h = e·sinh(H) − H` via Newton-Raphson (Battin initial guess), then converts to true anomaly and rotates to heliocentric ecliptic using the same direction cosine matrix as elliptic bodies.
 
 ---
 

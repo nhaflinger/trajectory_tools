@@ -25,6 +25,36 @@ end
 
 muSun = constants().Sun.mu;   % km^3/s^2
 
+% ---- hyperbolic orbit (e >= 1) ----
+% Requires body.t_peri_jd  (Julian Date of perihelion passage)
+%          body.e, body.inclination, body.Omega, body.omega_peri
+% body.a may be negative (convention) or positive; abs value is used.
+if isfield(body,'e') && body.e >= 1.0
+    abs_a = abs(body.a);                         % |semi-major axis|
+    n_h   = sqrt(muSun / abs_a^3);               % hyperbolic mean motion
+    dt    = (jd - body.t_peri_jd) * 86400;       % seconds from perihelion (signed)
+    M_h   = n_h * dt;                            % hyperbolic mean anomaly (signed)
+    H     = hyperbolicSolve(M_h, body.e);        % hyperbolic anomaly
+    nu    = 2 * atan(sqrt((body.e+1)/(body.e-1)) * tanh(H/2));
+    p     = abs_a * (body.e^2 - 1);
+    r     = p / (1 + body.e * cos(nu));
+    r_pqw = r * [cos(nu); sin(nu); 0];
+    v_pqw = sqrt(muSun/p) * [-sin(nu); body.e + cos(nu); 0];
+    % Rotate perifocal -> heliocentric ecliptic (same DCM as elliptic)
+    Om  = deg2rad(body.Omega);
+    om  = deg2rad(body.omega_peri);
+    inc = deg2rad(body.inclination);
+    cOm = cos(Om);  sOm = sin(Om);
+    com = cos(om);  som = sin(om);
+    ci  = cos(inc); si  = sin(inc);
+    R = [ cOm*com - sOm*som*ci,  -cOm*som - sOm*com*ci,  sOm*si;
+          sOm*com + cOm*som*ci,  -sOm*som + cOm*com*ci,  -cOm*si;
+          si*som,                  si*com,                  ci    ];
+    r_vec = R * r_pqw;
+    v_vec = R * v_pqw;
+    return;
+end
+
 % ---- fallback: circular coplanar ----
 if ~isfield(body,'Omega') || ~isfield(body,'omega_peri') || ~isfield(body,'M0')
     n     = sqrt(muSun / body.a^3);
@@ -93,5 +123,16 @@ function E = keplerSolve(M, e)
         dE = (M - E + e*sin(E)) / (1 - e*cos(E));
         E  = E + dE;
         if abs(dE) < 1e-13, break; end
+    end
+end
+
+function H = hyperbolicSolve(M_h, e)
+%HYPERBOLICSOLVE  Newton-Raphson solution of hyperbolic Kepler's equation
+%   M_h = e*sinh(H) - H.  Works for any signed M_h.
+    H = sign(M_h) * log(2*abs(M_h)/e + 1.8);   % Battin initial guess
+    for k = 1:50
+        dH = (M_h - e*sinh(H) + H) / (e*cosh(H) - 1);
+        H  = H + dH;
+        if abs(dH) < 1e-13, break; end
     end
 end

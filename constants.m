@@ -212,6 +212,28 @@ SSBodies.Haumea = struct('name', 'Haumea', ...
                          'M0',         218.2656, ... % deg, J2000
                          'obliquity', 0.0);
 
+%% Interstellar objects (hyperbolic, e > 1)
+% Elements from JPL Horizons, J2000 ecliptic frame.
+% Uses t_peri_jd (Julian Date of perihelion) instead of M0.
+% a is negative by convention (semi-major axis of hyperbola).
+
+% 1I/'Oumuamua — first known interstellar object (discovered Oct 2017)
+% Perihelion: 9 Sep 2017 (already passed through system)
+% Incoming direction: constellation Lyra.  v_inf ~ 26.33 km/s.
+oumuamua_q = 0.2559115 * SSBodies.Constants.AU;   % km, perihelion distance
+oumuamua_e = 1.19956;
+oumuamua_a = -oumuamua_q / (oumuamua_e - 1);      % km, negative for hyperbola
+SSBodies.Oumuamua = struct( ...
+    'name',         '1I/Oumuamua', ...
+    'mu',           0, ...           % negligible mass
+    'radius',       0.1, ...         % km (estimated ~100 m in longest dimension)
+    'a',            oumuamua_a, ...  % km  (negative — hyperbolic)
+    'e',            oumuamua_e, ...
+    'inclination',  122.7417, ...    % deg, ecliptic J2000
+    'Omega',         24.5993, ...    % deg, longitude of ascending node
+    'omega_peri',   241.8107, ...    % deg, argument of perihelion
+    't_peri_jd',    2458006.01525);  % JD, perihelion passage (2017-Sep-09)
+
 %% Sphere-of-influence helper
 bodies = fieldnames(SSBodies);
 for i = 1:numel(bodies)
