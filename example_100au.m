@@ -14,13 +14,13 @@ bodies = constants();
 AU    = bodies.Constants.AU;
 muSun = bodies.Sun.mu;
 
-R_sun      = bodies.Sun.radius;          % km
-r_peri_min = 9.86 * R_sun;              % km, PSP thermal floor
+R_sun      = bodies.Sun.radius;                    % km
+r_peri_min = R_sun + 3.8e6 * 1.60934;             % km — PSP Dec 2024: 3.8M miles above surface
 
 fprintf('\n======================================================\n');
 fprintf('  100 AU in 10 Years: Jupiter + Solar Oberth Design\n');
 fprintf('======================================================\n\n');
-fprintf('Thermal floor: %.2f R_sun = %.4f AU = %.0f km\n\n', ...
+fprintf('Perihelion floor: %.2f R_sun = %.4f AU = %.0f km (PSP: 3.8M miles above surface)\n\n', ...
     r_peri_min/R_sun, r_peri_min/AU, r_peri_min);
 
 %% ---- Parameters --------------------------------------------------------
@@ -254,12 +254,26 @@ h_hat_pl  = h_post_vec / norm(h_post_vec);
 q_hat_pl  = cross(h_hat_pl, e_hat_pl);
 R2d       = [e_hat_pl(1), q_hat_pl(1); e_hat_pl(2), q_hat_pl(2)];
 
-r_jup_hat = r_jup_arr / norm(r_jup_arr);
-nu_jup    = atan2(dot(q_hat_pl, r_jup_hat), dot(e_hat_pl, r_jup_hat));
-if nu_jup >= 0, nu_end_in = 2*pi; else, nu_end_in = 0; end
+r_jup_hat  = r_jup_arr / norm(r_jup_arr);
+r_jup_dist = norm(r_jup_arr);
+nu_jup     = atan2(dot(q_hat_pl, r_jup_hat), dot(e_hat_pl, r_jup_hat));
+% Construct the inbound arc as the unique conic through Jupiter that has
+% periapsis exactly at r_peri_actual.  Derived from the conic equation at
+% two points: r=r_jup_dist at nu=nu_jup and r=r_peri_actual at nu=0.
+%   r_jup_dist = p/(1 + e*cos(nu_jup))   and   r_peri_actual = p/(1+e)
+%   => e_draw = (r_peri_actual - r_jup_dist) / (r_jup_dist*cos(nu_jup) - r_peri_actual)
+% At periapsis (nu=0/2π) velocity is exactly perpendicular to the radius,
+% regardless of whether the natural post-flyby periapsis required clamping.
+e_draw = (r_peri_actual - r_jup_dist) / (r_jup_dist * cos(nu_jup) - r_peri_actual);
+e_draw = max(0, e_draw);
+p_draw = r_peri_actual * (1 + e_draw);
+if nu_jup >= 0
+    nu_end_in = 2*pi;
+else
+    nu_end_in = 0;
+end
 nu_in  = linspace(nu_jup, nu_end_in, 1200);
-p_in   = a_post * (1 - e_post^2);
-r_in   = p_in ./ (1 + e_post * cos(nu_in));
+r_in   = p_draw ./ (1 + e_draw * cos(nu_in));
 xy_in  = R2d * [r_in .* cos(nu_in); r_in .* sin(nu_in)] / AU;
 
 r_peri_vec  = e_hat_pl * r_peri_actual;
@@ -268,7 +282,11 @@ v_peri_dir  = v_peri_dir / norm(v_peri_dir);
 vinf_actual = sqrt(max(0, (v_peri + dv_oberth)^2 - v_esc_peri^2));
 e_esc       = 1 + r_peri_actual * vinf_actual^2 / muSun;
 p_esc       = r_peri_actual * (1 + e_esc);
-nu_max_esc  = acos(-1/e_esc) * 0.88;
+% Extend the arc to the edge of the full solar system plot (7 AU gives margin).
+% For a gently hyperbolic orbit (e≈1.05), 88% of nu_asym only reaches ~0.5 AU.
+r_arc_max   = 7.0 * AU;
+cos_nu_max  = max(-1.0, (p_esc/r_arc_max - 1) / e_esc);
+nu_max_esc  = min(acos(cos_nu_max), acos(-1/e_esc) * 0.9999);
 nu_esc      = linspace(0, nu_max_esc, 1200);
 r_esc       = p_esc ./ (1 + e_esc * cos(nu_esc));
 xy_esc      = R2d * [r_esc .* cos(nu_esc); r_esc .* sin(nu_esc)] / AU;
@@ -319,16 +337,18 @@ text(ax1,0.98,0.98,noteStr,'Units','normalized','VerticalAlignment','top', ...
     'HorizontalAlignment','right','Color',txtCol,'FontSize',8,'FontName','Monospaced', ...
     'BackgroundColor',[0.10 0.10 0.16 0.85],'Margin',4);
 
-%% Plot 2: Full solar system trajectory -----------------------------------
+%% Plot 2: Trajectory — full solar system + inner zoom (two panels) -------
 fig2 = figure('Name','100 AU Mission Trajectory','NumberTitle','off', ...
-    'Color',bgCol,'Position',[100 100 880 860]);
-ax2 = axes('Parent',fig2,'Color',bgCol,'XColor',axCol,'YColor',axCol, ...
-    'GridColor',gridC,'Box','on');
-hold(ax2,'on');  grid(ax2,'on');  axis(ax2,'equal');
+    'Color',bgCol,'Position',[100 60 1400 780]);
+
+% ---- Left panel: full solar system ±6.5 AU ----
+ax2L = axes('Parent',fig2,'Position',[0.05 0.10 0.44 0.82], ...
+    'Color',bgCol,'XColor',axCol,'YColor',axCol,'GridColor',gridC,'Box','on');
+hold(ax2L,'on');  grid(ax2L,'on');  axis(ax2L,'equal');
 
 for body = {bodies.Earth, bodies.Jupiter}
     b = body{1};
-    plot(ax2, (b.a/AU)*cos(th), (b.a/AU)*sin(th), '-', 'Color',[0.4 0.4 0.5 0.3], 'LineWidth',0.7);
+    plot(ax2L,(b.a/AU)*cos(th),(b.a/AU)*sin(th),'-','Color',[0.4 0.4 0.5 0.3],'LineWidth',0.7);
 end
 
 npts   = 1500;
@@ -342,44 +362,114 @@ for k = 1:npts
         r_leg1(:,k) = NaN;
     end
 end
-hL1 = plot(ax2, r_leg1(1,:), r_leg1(2,:), '-', 'Color',[0.35 0.75 1.00], 'LineWidth',2.0);
-hL2 = plot(ax2, xy_in(1,:),  xy_in(2,:),  '--','Color',[1.00 0.65 0.25], 'LineWidth',2.0);
-hL3 = plot(ax2, xy_esc(1,:), xy_esc(2,:), '-', 'Color',[1.00 0.35 0.35], 'LineWidth',2.5);
-quiver(ax2, xy_esc(1,end-1), xy_esc(2,end-1), ...
+hL1 = plot(ax2L, r_leg1(1,:), r_leg1(2,:), '-', 'Color',[0.35 0.75 1.00],'LineWidth',2.0);
+hL2 = plot(ax2L, xy_in(1,:),  xy_in(2,:),  '--','Color',[1.00 0.65 0.25],'LineWidth',2.0);
+hL3 = plot(ax2L, xy_esc(1,:), xy_esc(2,:), '-', 'Color',[1.00 0.35 0.35],'LineWidth',2.5);
+quiver(ax2L, xy_esc(1,end-1), xy_esc(2,end-1), ...
     xy_esc(1,end)-xy_esc(1,end-1), xy_esc(2,end)-xy_esc(2,end-1), ...
-    0, 'Color',[1.00 0.35 0.35], 'LineWidth',2.0, 'MaxHeadSize',3.0);
+    0,'Color',[1.00 0.35 0.35],'LineWidth',2.0,'MaxHeadSize',3.0);
 
-plot(ax2, r_earth_dep(1)/AU, r_earth_dep(2)/AU, 'o','MarkerSize',8, ...
+plot(ax2L, r_earth_dep(1)/AU, r_earth_dep(2)/AU, 'o','MarkerSize',8, ...
     'MarkerFaceColor',[0.20 0.45 0.75],'MarkerEdgeColor','w');
-text(ax2, r_earth_dep(1)/AU+0.1, r_earth_dep(2)/AU, ...
+text(ax2L, r_earth_dep(1)/AU+0.15, r_earth_dep(2)/AU, ...
     sprintf('  Earth\n  %s',datestr(jd_launch_best-1721058.5,'mmm yyyy')), ...
     'Color',txtCol,'FontSize',7);
-plot(ax2, r_jup_arr(1)/AU, r_jup_arr(2)/AU, 'o','MarkerSize',12, ...
+plot(ax2L, r_jup_arr(1)/AU, r_jup_arr(2)/AU, 'o','MarkerSize',12, ...
     'MarkerFaceColor',[0.75 0.60 0.45],'MarkerEdgeColor','w');
-text(ax2, r_jup_arr(1)/AU, r_jup_arr(2)/AU+0.4, ...
+text(ax2L, r_jup_arr(1)/AU, r_jup_arr(2)/AU+0.4, ...
     sprintf('Jupiter flyby\n%s',datestr(jd_jup_best-1721058.5,'mmm yyyy')), ...
     'Color',txtCol,'FontSize',7,'HorizontalAlignment','center');
-plot(ax2, r_peri_vec(1)/AU, r_peri_vec(2)/AU, 'y*', ...
-    'MarkerSize',11,'MarkerFaceColor',[1 1 0],'MarkerEdgeColor','w');
-text(ax2, r_peri_vec(1)/AU+0.12, r_peri_vec(2)/AU, ...
-    sprintf(' perihelion\n %.4f AU',r_peri_actual/AU),'Color',txtCol,'FontSize',7);
 
-fill(ax2, r_sun_AU*cos(th), r_sun_AU*sin(th), [1.00 0.85 0.20], ...
-    'EdgeColor',[1.00 0.95 0.50],'LineWidth',0.8);
-plot(ax2, (r_peri_min/AU)*cos(th), (r_peri_min/AU)*sin(th), '--', ...
-    'Color',[1 0.4 0.1 0.6],'LineWidth',1.0);
-text(ax2, r_peri_min/AU+0.03, 0, ' PSP limit','Color',[1 0.5 0.2],'FontSize',7);
+% Perihelion orbit (PSP encounter circle)
+hLP = plot(ax2L, (r_peri_actual/AU)*cos(th), (r_peri_actual/AU)*sin(th), '-', ...
+    'Color',[1.00 0.85 0.10],'LineWidth',1.2);
+text(ax2L, r_peri_actual/AU, 0, sprintf('  perihelion\n  %.3f AU',r_peri_actual/AU), ...
+    'Color',[1.00 0.85 0.10],'FontSize',7,'VerticalAlignment','middle');
 
-xlim(ax2,[-6.5 6.5]);  ylim(ax2,[-6.5 6.5]);
-xlabel(ax2,'x (AU, ecliptic J2000)','Color',txtCol);
-ylabel(ax2,'y (AU, ecliptic J2000)','Color',txtCol);
-title(ax2, sprintf('100 AU Mission Trajectory\nLaunch %s  |  Jupiter flyby %s  |  Oberth \\DeltaV = %.1f km/s  |  v_\\infty = %.1f km/s', ...
+fill(ax2L, r_sun_AU*cos(th), r_sun_AU*sin(th),[1.00 0.85 0.20],'EdgeColor',[1.00 0.95 0.50]);
+% Zoom-box outline
+zoom_au = 0.22;
+rectangle('Parent',ax2L,'Position',[-zoom_au -zoom_au 2*zoom_au 2*zoom_au], ...
+    'EdgeColor',[0.4 0.9 0.4],'LineWidth',1.2,'LineStyle',':');
+
+xlim(ax2L,[-6.5 6.5]);  ylim(ax2L,[-6.5 6.5]);
+xlabel(ax2L,'x (AU, ecliptic J2000)','Color',txtCol,'FontSize',9);
+ylabel(ax2L,'y (AU, ecliptic J2000)','Color',txtCol,'FontSize',9);
+title(ax2L, sprintf('Full Solar System\nLaunch %s  →  Jupiter flyby %s', ...
     datestr(jd_launch_best-1721058.5,'mmm yyyy'), ...
-    datestr(jd_jup_best-1721058.5,'mmm yyyy'), dv_oberth, vinf_grid(iL_best,iJ_best)), ...
-    'Color',txtCol,'FontSize',10);
-legend([hL1 hL2 hL3],{'Earth\rightarrowJupiter','Jupiter\rightarrowPerihelion','Post-Oberth escape'}, ...
+    datestr(jd_jup_best-1721058.5,'mmm yyyy')), 'Color',txtCol,'FontSize',9);
+legend(ax2L,[hL1 hL2 hLP hL3], ...
+    {'Earth\rightarrowJupiter','Jupiter\rightarrowPerihelion','Perihelion orbit','Post-Oberth escape'}, ...
     'Location','northwest','TextColor',txtCol,'FontSize',7, ...
     'Color',[0.10 0.10 0.16],'EdgeColor',axCol);
+
+% ---- Right panel: inner solar system ±0.22 AU ----
+ax2R = axes('Parent',fig2,'Position',[0.54 0.10 0.44 0.82], ...
+    'Color',bgCol,'XColor',axCol,'YColor',axCol,'GridColor',gridC,'Box','on');
+hold(ax2R,'on');  grid(ax2R,'on');  axis(ax2R,'equal');
+
+% Sun (to scale)
+fill(ax2R, r_sun_AU*cos(th), r_sun_AU*sin(th),[1.00 0.85 0.20],'EdgeColor',[1.00 0.95 0.50],'LineWidth',1.0);
+text(ax2R, 0, r_sun_AU*3, 'Sun','Color',[1.00 0.85 0.20],'FontSize',8,'HorizontalAlignment','center');
+
+% PSP thermal limit
+plot(ax2R,(r_peri_min/AU)*cos(th),(r_peri_min/AU)*sin(th),'--', ...
+    'Color',[1.00 0.45 0.10 0.8],'LineWidth',1.3);
+text(ax2R, r_peri_min/AU*cos(-pi/5), r_peri_min/AU*sin(-pi/5), ...
+    sprintf('  PSP limit\n  %.3f AU',r_peri_min/AU),'Color',[1 0.55 0.15],'FontSize',7.5);
+
+% Inbound arc — filter to zoom window (circular mask keeps the arc continuous)
+r_in_dist = sqrt(xy_in(1,:).^2 + xy_in(2,:).^2);
+seg_in = find(r_in_dist <= zoom_au*1.05);   % small margin so arc enters the frame visibly
+if ~isempty(seg_in)
+    % Include one point just outside to ensure the arc enters from the edge
+    i0 = max(1, seg_in(1)-1);
+    plot(ax2R, xy_in(1,i0:seg_in(end)), xy_in(2,i0:seg_in(end)), '--', ...
+        'Color',[1.00 0.65 0.25],'LineWidth',2.5);
+end
+
+% Post-Oberth escape arc — filter to zoom window
+r_esc_dist = sqrt(xy_esc(1,:).^2 + xy_esc(2,:).^2);
+seg_esc = find(r_esc_dist <= zoom_au*1.05);
+if ~isempty(seg_esc)
+    i_end = min(numel(r_esc_dist), seg_esc(end)+1);
+    plot(ax2R, xy_esc(1,1:i_end), xy_esc(2,1:i_end), '-', ...
+        'Color',[1.00 0.35 0.35],'LineWidth',2.5);
+    % Arrow at exit
+    if i_end > 1
+        quiver(ax2R, xy_esc(1,i_end-1), xy_esc(2,i_end-1), ...
+            xy_esc(1,i_end)-xy_esc(1,i_end-1), xy_esc(2,i_end)-xy_esc(2,i_end-1), ...
+            0,'Color',[1.00 0.35 0.35],'LineWidth',2.0,'MaxHeadSize',3.0);
+    end
+end
+
+% Perihelion
+plot(ax2R, r_peri_vec(1)/AU, r_peri_vec(2)/AU, 'y*', ...
+    'MarkerSize',14,'MarkerFaceColor',[1 1 0],'MarkerEdgeColor','w');
+text(ax2R, r_peri_vec(1)/AU, r_peri_vec(2)/AU - zoom_au*0.06, ...
+    sprintf('Perihelion\n%.4f AU  (%.1f R_{\\odot})', r_peri_actual/AU, r_peri_actual/R_sun), ...
+    'Color',txtCol,'FontSize',8,'HorizontalAlignment','center','VerticalAlignment','top');
+
+% ΔV arrow
+dv_scale = zoom_au * 0.13;
+quiver(ax2R, r_peri_vec(1)/AU, r_peri_vec(2)/AU, ...
+    v_peri_dir(1)*dv_scale, v_peri_dir(2)*dv_scale, ...
+    0,'Color',[0.30 1.00 0.30],'LineWidth',2.5,'MaxHeadSize',2.5);
+text(ax2R, r_peri_vec(1)/AU + v_peri_dir(1)*dv_scale*1.3, ...
+         r_peri_vec(2)/AU + v_peri_dir(2)*dv_scale*1.3, ...
+    sprintf(' \\DeltaV %.1f km/s',dv_oberth),'Color',[0.30 1.00 0.30],'FontSize',8);
+
+xlim(ax2R,[-zoom_au zoom_au]);  ylim(ax2R,[-zoom_au zoom_au]);
+xlabel(ax2R,'x (AU, ecliptic J2000)','Color',txtCol,'FontSize',9);
+ylabel(ax2R,'y (AU, ecliptic J2000)','Color',txtCol,'FontSize',9);
+title(ax2R, sprintf('Inner Solar System Zoom  (green box)\nr_{peri} = %.4f AU (%.1f R_\\odot)  |  Oberth \\DeltaV = %.1f km/s  |  v_\\infty = %.1f km/s', ...
+    r_peri_actual/AU, r_peri_actual/R_sun, dv_oberth, vinf_grid(iL_best,iJ_best)), ...
+    'Color',txtCol,'FontSize',9);
+
+sgtitle(fig2, sprintf('100 AU Mission Trajectory  —  Launch %s  |  Jupiter flyby %s', ...
+    datestr(jd_launch_best-1721058.5,'mmm yyyy'), ...
+    datestr(jd_jup_best-1721058.5,'mmm yyyy')), ...
+    'Color',txtCol,'FontSize',11);
 
 %% Plot 3: Jupiter flyby geometry (perifocal frame) -----------------------
 R_JUP     = r_jup_body;
