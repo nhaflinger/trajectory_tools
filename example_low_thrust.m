@@ -25,6 +25,11 @@ r_Moon = bodies.Moon.a;            % km  ~384 400 km (lunar distance from Earth)
 
 g0 = 9.80665e-3;  % km/s^2
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_low_thrust');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 fprintf('\n=================================================================\n');
 fprintf('  Low-Thrust Orbit Transfer Examples\n');
 fprintf('=================================================================\n\n');
@@ -84,7 +89,8 @@ res3 = lowThrustSpiral(Earth, r_LEO, r_Moon, opts3);
 printSpiralResult(res3, NaN);
 
 % Plot the spiral
-plotLowThrustSpiral(res3, Earth);
+fig3 = plotLowThrustSpiral(res3, Earth);
+saveas(fig3, fullfile(outDir, 'low_thrust_spiral_leo_lunar.png'));
 
 %% ---- Case 4: Propulsion trade study ---------------------------------
 fprintf('--- Case 4: Propulsion trade — LEO->GEO, no plane change ---\n');
@@ -110,7 +116,8 @@ fprintf('\n');
 fprintf('  Note: impulsive Hohmann dV = %.4f km/s (Oberth benefit, higher dV for spiral)\n\n', dv_hoh);
 
 %% ---- Plot Case 1 (GEO spiral) ---------------------------------------
-plotLowThrustSpiral(res1, Earth);
+fig1 = plotLowThrustSpiral(res1, Earth);
+saveas(fig1, fullfile(outDir, 'low_thrust_spiral_leo_geo.png'));
 
 
 

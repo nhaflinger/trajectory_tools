@@ -21,6 +21,11 @@
 bodies = constants();
 g0     = 9.80665e-3;   % km/s^2
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_dawn');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 fprintf('\n=================================================================\n');
 fprintf('  NASA Dawn Mission Reproduction\n');
 fprintf('  Launch: 27 Sep 2007  |  Ceres arrival: 06 Mar 2015\n');
@@ -279,8 +284,9 @@ res_leg1.details.r2_helio       = r2_mars;
 res_leg1.phases.departure       = ph_skip_dep;
 res_leg1.phases.heliocentric    = leg1;
 res_leg1.phases.arrival         = ph_skip_arr_mars;
-plotLowThrustInterplanetary(res_leg1, bodies.Earth, bodies.Mars, ...
+fig1 = plotLowThrustInterplanetary(res_leg1, bodies.Earth, bodies.Mars, ...
     struct('lvEscapeDV', lv_escape_dv, 'lvParkAlt', alt_earth_park));
+saveas(fig1, fullfile(outDir, 'dawn_leg1_earth_mars.png'));
 
 % --- Plot 2: Mars -> Vesta (Leg 2, cruise + insertion) -------------------
 ph_skip_dep2.deltaV       = 0;   ph_skip_dep2.tof = 0;
@@ -301,7 +307,8 @@ res_leg2.details.r2_helio       = r3_vesta_helio;
 res_leg2.phases.departure       = ph_skip_dep2;
 res_leg2.phases.heliocentric    = leg2_helio;
 res_leg2.phases.arrival         = leg2_insert;
-plotLowThrustInterplanetary(res_leg2, bodies.Mars, bodies.Vesta);
+fig2 = plotLowThrustInterplanetary(res_leg2, bodies.Mars, bodies.Vesta);
+saveas(fig2, fullfile(outDir, 'dawn_leg2_mars_vesta.png'));
 
 % --- Plot 3: Vesta -> Ceres (Leg 3, escape + cruise + insertion) ---------
 res_leg3.deltaV         = leg3_escape.deltaV + leg3_helio.deltaV + leg3_insert.deltaV;
@@ -317,4 +324,5 @@ res_leg3.details.r2_helio       = r5_ceres_arr;
 res_leg3.phases.departure       = leg3_escape;
 res_leg3.phases.heliocentric    = leg3_helio;
 res_leg3.phases.arrival         = leg3_insert;
-plotLowThrustInterplanetary(res_leg3, bodies.Vesta, bodies.Ceres);
+fig3 = plotLowThrustInterplanetary(res_leg3, bodies.Vesta, bodies.Ceres);
+saveas(fig3, fullfile(outDir, 'dawn_leg3_vesta_ceres.png'));

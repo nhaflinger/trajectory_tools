@@ -21,6 +21,11 @@ bodies = constants();
 Earth  = bodies.Earth;
 Moon   = bodies.Moon;
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_lunar_south_pole');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 %% Common options
 options = struct();
 options.departureAltitude     = 200;   % km, LEO parking orbit altitude
@@ -128,12 +133,14 @@ fprintf('  Speed at apolune:            %7.3f km/s\n',  v_apo);
 
 %% Trajectory plots — direct transfer (overview + body-centric)
 plotPatchedConic(result_direct, Earth, Moon);
+saveas(gcf, fullfile(outDir, 'lunar_south_pole_direct_transfer.png'));
 
 %% Trajectory plots — bi-elliptic transfer (body-centric shows intermediate orbits)
 plotPatchedConic(result_bi, Earth, Moon);
+saveas(gcf, fullfile(outDir, 'lunar_south_pole_bielliptic_transfer.png'));
 
 %% Delta-V comparison figure
-figure('Name', 'Delta-V Comparison: Direct vs Bi-elliptic', 'NumberTitle', 'off', ...
+figDV = figure('Name', 'Delta-V Comparison: Direct vs Bi-elliptic', 'NumberTitle', 'off', ...
        'Position', [100 100 620 420]);
 
 labels  = {'TLI', 'LOI (equatorial)', 'Plane change', 'Apoapsis trim', 'TCM'};
@@ -158,3 +165,4 @@ grid on;
 text(0.98, 0.97, sprintf('Savings: %.3f km/s', dv_total_dir - dv_total_bi), ...
      'Units', 'normalized', 'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', ...
      'FontSize', 10, 'FontWeight', 'bold', 'Color', [0.1 0.6 0.1]);
+saveas(figDV, fullfile(outDir, 'lunar_south_pole_dv_comparison.png'));

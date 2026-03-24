@@ -33,6 +33,11 @@
 bodies = constants();
 bSeq   = {bodies.Earth, bodies.Mars, bodies.Earth, bodies.Jupiter};
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_emej_europa_clipper');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 %% ---- Fixed boundary dates (actual EC mission) ----
 jd_launch  = julianDate(2024, 10, 14);
 jd_jup_arr = julianDate(2030,  4, 11);
@@ -201,6 +206,7 @@ fprintf('\n  EMEJ saves vs direct EJ:  %+.3f km/s\n', ...
 
 %% ---- Plot ----
 plotFlybySequence(bestRes, bSeq);
+saveas(gcf, fullfile(outDir, 'emej_flyby_sequence.png'));
 
 %% ---- Local helpers ----
 function dv = emej_obj(x, jd_launch, t_total, bSeq, seqOpts)

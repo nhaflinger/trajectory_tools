@@ -7,6 +7,11 @@ bodies = constants();
 Earth  = bodies.Earth;
 Moon   = bodies.Moon;
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_lunar_transfer');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 options = struct();
 options.departureAltitude    = 200;   % km, LEO parking orbit
 options.arrivalAltitude      = 100;   % km, circular lunar orbit altitude
@@ -63,3 +68,4 @@ fprintf('  Total delta-V (+TCM):      %7.3f km/s\n',  dv_total);
 
 % ---- Trajectory plots ----
 plotPatchedConic(result, Earth, Moon);
+saveas(gcf, fullfile(outDir, 'lunar_transfer.png'));

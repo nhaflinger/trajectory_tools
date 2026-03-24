@@ -8,6 +8,11 @@
 
 bodies = constants();
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_low_thrust_interplanetary');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 fprintf('\n=================================================================\n');
 fprintf('  Low-Thrust Interplanetary: Earth -> Mars\n');
 fprintf('=================================================================\n\n');
@@ -26,7 +31,8 @@ opts = struct( ...
 
 %% ---- Three-phase mission budget ------------------------------------
 res = lowThrustInterplanetary(bodies.Earth, bodies.Mars, departJD, tofDays, opts);
-plotLowThrustInterplanetary(res, bodies.Earth, bodies.Mars);
+fig1 = plotLowThrustInterplanetary(res, bodies.Earth, bodies.Mars);
+saveas(fig1, fullfile(outDir, 'low_thrust_interplanetary_earth_mars.png'));
 
 fprintf('Three-phase low-thrust Earth -> Mars\n');
 fprintf('  Departure: %s   TOF budget: %d days\n', ...
@@ -106,4 +112,5 @@ pcOpts = struct( ...
     'arrivalAltitude',   400,        ...
     'showImpulsive',     true);
 
-porkChopLowThrust(bodies.Earth, bodies.Mars, depDates, tofRange, pcOpts);
+fig2 = porkChopLowThrust(bodies.Earth, bodies.Mars, depDates, tofRange, pcOpts);
+saveas(fig2, fullfile(outDir, 'pork_chop_low_thrust_earth_mars.png'));

@@ -4,6 +4,11 @@
 
 bodies = constants();
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_interplanetary_transfer');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 options = struct();
 options.departureAltitude    = 200;   % km, Earth LEO parking orbit
 options.arrivalAltitude      = 400;   % km, Mars capture orbit altitude
@@ -21,6 +26,7 @@ fprintf('Best 2026-2032 launch: %s  TOF = %.0f days  DV_helio = %.3f km/s\n', ..
     datestr(best.departureJD - 1721058.5, 'yyyy-mm-dd'), best.tofDays, best.deltaV);
 
 porkChopPlot(bodies.Earth, bodies.Mars, best.departJD, tofDays);
+saveas(gcf, fullfile(outDir, 'pork_chop_earth_mars.png'));
 
 % ---- High-fidelity Lambert transfer at best date ----
 options.departureJD  = best.departureJD;
@@ -44,6 +50,7 @@ fprintf('  v_inf arrival    : %.3f km/s\n', result.details.vInfArrive);
 fprintf('  Arrival date     : %s\n', datestr(arrJD - 1721058.5, 'yyyy-mm-dd'));
 
 plotPatchedConic(result, bodies.Earth, bodies.Mars);
+saveas(gcf, fullfile(outDir, 'patched_conic_earth_mars.png'));
 
 % ---- Type II comparison ----
 options.transferType = 'type2';

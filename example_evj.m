@@ -11,6 +11,11 @@
 bodies = constants();
 bSeq   = {bodies.Earth, bodies.Venus, bodies.Jupiter};
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_evj');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 %% ---- Search for best EVJ launch window (2026-2040) ----
 jdStart = julianDate(2026, 1, 1);
 jdEnd   = julianDate(2040, 12, 31);
@@ -133,6 +138,7 @@ fprintf('\n  EVJ gravity assist saves:    %+.3f km/s\n', ...
 
 %% ---- Plot ----
 plotFlybySequence(result, bSeq);
+saveas(gcf, fullfile(outDir, 'evj_flyby_sequence.png'));
 
 function s = yesno(tf)
     if tf, s = 'Yes'; else, s = 'No (powered flyby needed)'; end

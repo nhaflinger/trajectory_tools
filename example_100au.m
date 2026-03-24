@@ -14,6 +14,11 @@ bodies = constants();
 AU    = bodies.Constants.AU;
 muSun = bodies.Sun.mu;
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_100au');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 R_sun      = bodies.Sun.radius;                    % km
 r_peri_min = R_sun + 3.8e6 * 1.60934;             % km — PSP Dec 2024: 3.8M miles above surface
 
@@ -336,6 +341,7 @@ noteStr = sprintf('Best trajectory:\n  Launch: %s\n  Flyby:  %s\n  C3 = %.1f km^
 text(ax1,0.98,0.98,noteStr,'Units','normalized','VerticalAlignment','top', ...
     'HorizontalAlignment','right','Color',txtCol,'FontSize',8,'FontName','Monospaced', ...
     'BackgroundColor',[0.10 0.10 0.16 0.85],'Margin',4);
+saveas(fig1, fullfile(outDir, 'oberth_trade.png'));
 
 %% Plot 2: Trajectory — full solar system + inner zoom (two panels) -------
 fig2 = figure('Name','100 AU Mission Trajectory','NumberTitle','off', ...
@@ -470,6 +476,7 @@ sgtitle(fig2, sprintf('100 AU Mission Trajectory  —  Launch %s  |  Jupiter fly
     datestr(jd_launch_best-1721058.5,'mmm yyyy'), ...
     datestr(jd_jup_best-1721058.5,'mmm yyyy')), ...
     'Color',txtCol,'FontSize',11);
+saveas(fig2, fullfile(outDir, 'mission_trajectory.png'));
 
 %% Plot 3: Jupiter flyby geometry (perifocal frame) -----------------------
 R_JUP     = r_jup_body;
@@ -521,6 +528,7 @@ legend([hSOI hJUP hFin hFout hPeri3], ...
     {'SOI','Jupiter','Inbound','Outbound','Periapsis'}, ...
     'Location','northwest','TextColor',txtCol,'FontSize',8, ...
     'Color',[0.10 0.10 0.16],'EdgeColor',axCol);
+saveas(fig3, fullfile(outDir, 'jupiter_flyby_geometry.png'));
 
 %% Plot 4: Solar Oberth maneuver close-up ---------------------------------
 zoom_au = 0.22;   % half-width of zoom window (AU)
@@ -597,6 +605,7 @@ legend([hSun4 hPSP4 hIn4 hEsc4 hP4 hDV4], ...
     {'Sun','PSP thermal limit','Inbound arc','Post-Oberth escape','Perihelion','\DeltaV'}, ...
     'Location','northwest','TextColor',txtCol,'FontSize',8, ...
     'Color',[0.10 0.10 0.16],'EdgeColor',axCol);
+saveas(fig4, fullfile(outDir, 'solar_oberth_maneuver.png'));
 
 fprintf('Done.\n');
 

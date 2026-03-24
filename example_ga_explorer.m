@@ -32,6 +32,11 @@ bodies = constants();
 muSun  = bodies.Sun.mu;
 AU     = bodies.Constants.AU;
 
+outDir = fullfile(fileparts(mfilename('fullpath')), 'output_ga_explorer');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
 jdStart = julianDate(2026,  1,  1);
 jdEnd   = julianDate(2032, 12, 31);
 
@@ -229,6 +234,7 @@ end
 legend(ax1, 'show', 'Location', 'northwest', 'FontSize', 7, ...
     'TextColor', [0.85 0.85 0.85], 'Color', [0.08 0.08 0.12], ...
     'EdgeColor', [0.4 0.4 0.4]);
+saveas(fig1, fullfile(outDir, 'tisserand_graph.png'));
 
 %% ---- Figure 2: Pork-chop for best single-flyby sequence ------------------
 
@@ -252,6 +258,7 @@ fig2 = porkChopSequence(s.bSeq, jdStart, jdEnd, s.tofRanges, pcOpts);
 sgtitle(fig2, sprintf('Best 1-flyby: %s  (%.3f km/s total ΔV)', ...
     s.name, fullResults{best1FB_idx}.deltaV), ...
     'Color',[0.9 0.9 0.9], 'FontSize',11);
+saveas(fig2, fullfile(outDir, 'pork_chop_best_single_flyby.png'));
 
 %% ---- Figure 3: Pork-chop for best multi-flyby sequence -------------------
 
@@ -275,11 +282,13 @@ fig3 = porkChopSequence(s.bSeq, jdStart, jdEnd, s.tofRanges, pcOpts2);
 sgtitle(fig3, sprintf('Best multi-flyby: %s  (%.3f km/s total ΔV)', ...
     s.name, fullResults{best2FB_idx}.deltaV), ...
     'Color',[0.9 0.9 0.9], 'FontSize',11);
+saveas(fig3, fullfile(outDir, 'pork_chop_best_multi_flyby.png'));
 
 %% ---- Figure 4: 3D trajectory for lowest-DV sequence ---------------------
 
 fprintf('\nPlotting 3D trajectory for best sequence: %s\n', seqs{bestIdx}.name);
 plotFlybySequence(fullResults{bestIdx}, seqs{bestIdx}.bSeq);
+saveas(gcf, fullfile(outDir, '3d_trajectory_best_sequence.png'));
 
 %% ---- Local helper --------------------------------------------------------
 
