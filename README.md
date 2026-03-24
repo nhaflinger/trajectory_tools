@@ -762,3 +762,523 @@ The propagator solves `M_h = e·sinh(H) − H` via Newton-Raphson (Battin initia
 
 - MATLAB R2019b or later (`deg2rad`, `rad2deg`, `surf`, `patch`, `quiver3`, `contourf`)
 - No additional toolboxes required
+
+---
+
+---
+
+# Earth Orbit Tools
+
+A comprehensive MATLAB toolkit for Earth-orbiting spacecraft analysis. Covers orbit definition and propagation, ground track and coverage analysis, orbital maneuvers, relative motion, orbit design, constellation design, link budget, and sensor footprint — all without any additional toolboxes.
+
+---
+
+## Overview
+
+Key capabilities:
+
+**Orbit Definition & Propagation**
+- Classical orbital elements (COE) and state vector representation
+- Keplerian, J2, numerical (full perturbations), drag, J3/J4, SRP, and combined propagation modes
+- ECI ↔ COE conversion, ECEF/geodetic transformations
+
+**Ground Tracks & Coverage**
+- Ground track visualization with J2 precession, antimeridian wrapping, coastlines
+- Point coverage analysis and global coverage maps
+- Access window computation with minimum elevation mask
+
+**Orbital Maneuvers**
+- Hohmann transfer, plane change, phasing maneuver, deorbit burn
+- Launch window and dog-leg inclination trade studies
+- Geostationary station-keeping budget
+
+**Relative Motion (Clohessy-Wiltshire)**
+- CW state-transition matrix propagation and closed-orbit initial conditions
+- Two-impulse CW rendezvous with singularity detection
+
+**Orbit Design**
+- Orbit lifetime with orbit-averaged drag decay (USSA76)
+- Frozen orbit computation (J2/J3 balance, ω = 90° or 270°)
+- Repeating ground track design with J2-corrected mean motion
+
+**Constellation Design**
+- Walker T/P/F constellation generation
+- Multi-satellite coverage analysis (mean coverage fraction, revisit time)
+- Constellation ground track visualization colored by plane
+
+**Communications & Sensors**
+- Link budget: free-space path loss, Eb/N0, link margin, Doppler shift (static and pass modes)
+- Sensor footprint: nadir and off-nadir pointing, ray-sphere intersection, coverage area
+- Access window Gantt chart colored by elevation
+
+---
+
+## File Structure
+
+### Core utilities
+
+| File | Purpose |
+|------|---------|
+| `earthOrbit.m` | Create Earth orbit struct from COE or predefined type (`circular`, `sun-sync`, `molniya`, `geo`, `coe`) |
+| `coe2eci.m` | Classical orbital elements → ECI position and velocity |
+| `eci2coe.m` | ECI state vector → classical orbital elements |
+| `wgs84Geodetic.m` | ECEF Cartesian ↔ WGS84 geodetic (lat, lon, alt) |
+| `sunPosition.m` | Sun position vector in ECI (mean elements) |
+
+### Propagation
+
+| File | Purpose |
+|------|---------|
+| `propagateOrbit.m` | Multi-mode propagator: `kepler`, `j2`, `j3`, `j4`, `drag`, `srp`, `full` (numerical RK4) |
+
+### Visualization
+
+| File | Purpose |
+|------|---------|
+| `plotGroundTrack.m` | Ground track on 2-D map with coastlines, J2 precession, optional orbit coloring |
+| `plotOrbit3D.m` | 3-D orbit visualization in ECI frame |
+| `downloadCoastlines.m` | Auto-downloads Natural Earth coastlines and caches to `coastlines_cache.mat` |
+
+### Coverage & Access
+
+| File | Purpose |
+|------|---------|
+| `coverageAnalysis.m` | Time-averaged coverage grid: coverage fraction and revisit time per grid cell |
+| `plotCoverage.m` | Visualization of `coverageAnalysis` output: coverage fraction and revisit-time maps |
+| `accessWindows.m` | Compute access windows between a satellite and one or more ground stations |
+| `topocentricAzEl.m` | Topocentric azimuth and elevation from ECI state and ground station |
+
+### Maneuvers & Launch
+
+| File | Purpose |
+|------|---------|
+| `hohmannTransfer.m` | Two-burn Hohmann transfer: ΔV, TOF, and orbit parameters |
+| `planeChange.m` | Pure plane-change burn (single or split at apoapsis) |
+| `phasingManeuver.m` | Phasing orbit to achieve a target orbital position offset |
+| `deorbitBurn.m` | Deorbit burn sizing to achieve target perigee for reentry |
+| `launchWindow.m` | Launch window analysis for a target inclination from a given launch site |
+| `dogLegTrade.m` | Dog-leg inclination change trade: direct vs. two-burn dog-leg comparison |
+| `geoStationKeeping.m` | GEO N-S and E-W station-keeping ΔV budget |
+
+### Advanced Analysis
+
+| File | Purpose |
+|------|---------|
+| `betaAngle.m` | Sun-orbit beta angle as a function of time |
+| `plotBetaAngle.m` | Beta angle time history with eclipse season boundaries |
+| `lvlhFrame.m` | LVLH (Local Vertical Local Horizontal) frame DCM from ECI state |
+
+### Relative Motion
+
+| File | Purpose |
+|------|---------|
+| `cwPropagate.m` | CW state-transition matrix propagation — analytical closed-form |
+| `cwRendezvous.m` | Two-impulse CW rendezvous: compute Δv₁ and Δv₂ from initial/final offsets |
+
+### Orbit Design
+
+| File | Purpose |
+|------|---------|
+| `orbitLifetime.m` | Orbit-averaged drag decay with USSA76 atmosphere — lifetime and altitude history |
+| `frozenOrbit.m` | J2/J3 frozen orbit eccentricity and argument of perigee |
+| `repeatingGroundTrack.m` | J2-corrected repeating ground track design (N_rev/N_day ratio) |
+
+### Constellation Design
+
+| File | Purpose |
+|------|---------|
+| `walkerConstellation.m` | Generate Walker delta constellation (T/P/F notation) |
+| `constellationCoverage.m` | Multi-satellite time-averaged coverage and revisit time |
+| `plotConstellationGroundTrack.m` | Constellation ground track plot, colored by orbital plane |
+
+### Communications & Sensors
+
+| File | Purpose |
+|------|---------|
+| `linkBudget.m` | Link budget: EIRP, FSPL, Eb/N0, link margin, Doppler — static or pass mode |
+| `sensorFootprint.m` | Ground footprint via ray-sphere intersection — nadir and off-nadir pointing |
+| `plotAccessWindowGantt.m` | Gantt-style access window chart for a ground station network |
+
+### Example Scripts
+
+| File | Demonstrates |
+|------|-------------|
+| `example_earth_orbit.m` | Orbit definition, propagation modes, ground tracks |
+| `example_earth_coverage.m` | Coverage analysis, access windows, coverage maps |
+| `example_maneuvers.m` | Hohmann, plane change, phasing, deorbit, dog-leg trade |
+| `example_advanced_orbit.m` | Beta angle, GEO station-keeping, CW relative motion, frozen orbits |
+| `example_orbit_lifetime.m` | Drag decay (LEO/Molniya/SSO), frozen orbits, repeating ground tracks, CW rendezvous |
+| `example_constellation.m` | Walker constellations, coverage comparison, repeating ground track survey |
+| `example_comms_footprint.m` | Link budget, sensor footprint, access window Gantt |
+
+### Validation
+
+| File | Purpose |
+|------|---------|
+| `runTests.m` | Unit and integration test suite for Earth orbit tools |
+
+---
+
+## Quick Start
+
+```matlab
+% Add repo to path, then run any example:
+run('example_earth_orbit.m')
+run('example_earth_coverage.m')
+run('example_maneuvers.m')
+run('example_advanced_orbit.m')
+run('example_orbit_lifetime.m')
+run('example_constellation.m')
+run('example_comms_footprint.m')
+```
+
+---
+
+## Orbit Definition
+
+`earthOrbit` creates a standardized orbit struct used by all Earth orbit tools.
+
+```matlab
+% Predefined types
+orb = earthOrbit('circular', 550, 53);          % alt_km, inc_deg
+orb = earthOrbit('sun-sync', 550);              % alt_km (inclination computed)
+orb = earthOrbit('molniya');                    % 12-hr, i=63.4°, e=0.74
+orb = earthOrbit('geo');                        % geostationary
+orb = earthOrbit('coe', a_km, e, i, RAAN, omega, M0);   % full COE
+orb = earthOrbit('coe', a_km, e, i, RAAN, omega, M0, epoch_jd);
+```
+
+Key output fields: `.a` (km), `.e`, `.i` (deg), `.RAAN` (deg), `.omega` (deg), `.M0` (deg), `.period` (s), `.epoch_jd`.
+
+---
+
+## Propagation
+
+`propagateOrbit(orb, duration_s)` integrates the orbit forward in time.
+
+```matlab
+orb  = earthOrbit('circular', 500, 97.4);
+traj = propagateOrbit(orb, 24*3600, 'Method', 'j2', 'StepSize', 60);
+% traj.t (s), traj.r (km, Nx3), traj.v (km/s, Nx3)
+```
+
+| Method | Description |
+|--------|-------------|
+| `'kepler'` | Two-body Keplerian (analytic mean-motion propagation) |
+| `'j2'` | J2 secular drift added analytically |
+| `'numerical'` | RK4 numerical integrator, no perturbations |
+| `'drag'` | RK4 + exponential atmospheric drag (USSA76) |
+| `'j3'` | RK4 + J2 + J3 gravity perturbations |
+| `'j4'` | RK4 + J2 + J3 + J4 gravity perturbations |
+| `'srp'` | RK4 + solar radiation pressure |
+| `'full'` | RK4 + drag + J2–J4 + SRP |
+
+---
+
+## Ground Tracks & Coverage
+
+```matlab
+% Ground track — 5 orbits, J2, colored by orbit number
+orb = earthOrbit('sun-sync', 550);
+plotGroundTrack(orb, 'NumOrbits', 5, 'J2', true, 'ColorByOrbit', true);
+
+% Coverage analysis — 24-hour, 2° grid, 10° minimum elevation
+cov = coverageAnalysis(orb, 24*3600, 'GridRes', 2, 'MinElevation', 10);
+plotCoverage(cov);
+
+% Access windows to a ground station
+gs = struct('lat', 30.27, 'lon', -97.74, 'alt', 0.15, 'name', 'Austin TX');
+wins = accessWindows(orb, gs, 86400, 'MinElevation', 10);
+```
+
+---
+
+## Orbital Maneuvers
+
+```matlab
+% Hohmann transfer: 400 km → 800 km
+h = hohmannTransfer(orb_400, 800);
+fprintf('dV1 = %.3f km/s  dV2 = %.3f km/s  TOF = %.0f min\n', ...
+    h.dv1, h.dv2, h.tof/60);
+
+% Dog-leg inclination trade
+dogLegTrade(orb, 28.5, 51.6);   % target inclination, launch site latitude
+```
+
+---
+
+## CW Relative Motion
+
+The Clohessy-Wiltshire (CW) equations describe relative motion in the rotating LVLH frame (R = radial, S = along-track, W = cross-track) about a reference circular orbit.
+
+### Closed CW orbit initial conditions
+
+For a bounded (non-drifting) relative orbit: `dVS_0 = -2·n·dR_0`
+
+```matlab
+n   = 2*pi / orb.period;           % mean motion (rad/s)
+dr0 = [1.0; 0; 0.5];               % km, initial LVLH offset [R; S; W]
+dv0 = [0; -2*n*dr0(1); 0];         % km/s, closed-orbit condition
+
+% Propagate analytically via CW STM
+[r_hist, v_hist] = cwPropagate(dr0, dv0, n, t_vec);
+```
+
+### Two-impulse CW rendezvous
+
+```matlab
+result = cwRendezvous(dr0, dv0, n, tf);
+% result.dv1    — first impulse (km/s, LVLH)
+% result.dv2    — second impulse (km/s, LVLH)
+% result.dv_total — total ΔV (km/s)
+```
+
+**Singularity note:** `tf = k·T/2` (k = 1, 2, …) zeros the W-diagonal of the CW position-velocity transition matrix block Φ_rv, making the rendezvous equation singular. Safe transfer times: 0.4T, 0.6T, 0.75T.
+
+---
+
+## Orbit Lifetime
+
+`orbitLifetime(orb)` computes drag-induced orbit decay using an orbit-averaged model with USSA76 atmosphere.
+
+```matlab
+orb = earthOrbit('circular', 450, 28.5);
+[res, fig] = orbitLifetime(orb, 'CdAm', 0.01, 'Plot', true);
+fprintf('Estimated lifetime: %.1f years\n', res.lifetime_years);
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `CdAm` | `0.01` | Ballistic coefficient Cd·A/m (m²/kg) |
+| `MaxYears` | `200` | Integration ceiling (years) |
+| `StepOrbits` | `10` | Orbits per integration step |
+| `Plot` | `false` | Generate altitude-vs-time plot |
+
+Output fields: `res.lifetime_years`, `res.t_years`, `res.alt_km` (perigee history), `res.a_km`, `res.e`.
+
+---
+
+## Frozen Orbits
+
+A frozen orbit eliminates secular variation in eccentricity and argument of perigee by balancing J2 and J3 perturbations.
+
+```matlab
+frz = frozenOrbit(550, 98);   % alt_km, inc_deg
+fprintf('e_frozen = %.6f  omega = %.1f deg\n', frz.e_frozen, frz.omega_deg);
+```
+
+The J2/J3 balance condition is:
+
+```
+e_frozen = -(J3 / 2·J2) · (R_E / p) · sin(i)
+```
+
+with ω = 90° (ascending node side) or ω = 270°. The solution is iterated to account for the semi-latus rectum p dependence on e.
+
+| Output field | Description |
+|-------------|-------------|
+| `frz.e_frozen` | Frozen eccentricity |
+| `frz.omega_deg` | Required argument of perigee (90° or 270°) |
+| `frz.omega_dot_J2` | J2-only ω drift rate (deg/day) |
+| `frz.omega_dot_total` | J2 + J3 combined ω drift rate (deg/day) |
+
+---
+
+## Repeating Ground Tracks
+
+`repeatingGroundTrack(N_rev, N_day, inc_deg)` finds the orbit altitude at which the spacecraft completes exactly N_rev orbits in N_day sidereal days, accounting for J2-induced nodal regression.
+
+```matlab
+res = repeatingGroundTrack(14, 1, 98);   % 14 rev/day, SSO
+fprintf('Alt = %.2f km  Period = %.4f min\n', res.alt_km, res.period_s/60);
+```
+
+| Output field | Description |
+|-------------|-------------|
+| `res.alt_km` | Orbit altitude (km) |
+| `res.a_km` | Semi-major axis (km) |
+| `res.period_s` | Orbital period (s) |
+| `res.RAAN_dot_deg_day` | Nodal regression rate (deg/day) |
+| `res.ground_track_spacing_deg` | Ground track node spacing (deg) |
+
+---
+
+## Walker Constellations
+
+`walkerConstellation(inc_deg, alt_km, T, P, F)` generates a Walker delta constellation in the standard T/P/F notation: T total satellites in P planes with phasing parameter F.
+
+```matlab
+% Starlink-like shell: 24 sats, 6 planes, phasing F=1
+sats = walkerConstellation(53, 550, 24, 6, 1);
+
+% GPS-like MEO: 24 sats, 6 planes, F=2
+sats = walkerConstellation(55, 20200, 24, 6, 2);
+
+% Plot ground tracks colored by plane
+plotConstellationGroundTrack(sats, 'NumOrbits', 1, 'Title', 'My Constellation');
+```
+
+**Walker geometry**: RAAN spacing between planes = 360°/P. Mean anomaly offset between adjacent satellites in neighboring planes = F·360°/T.
+
+### Coverage analysis
+
+```matlab
+cov = constellationCoverage(sats, 24, ...
+    'GridRes', 5, 'MinElevation', 10, 'StepSize', 120);
+
+% cov.coverage_frac   — fraction of time each grid cell has >= 1 satellite visible
+% cov.revisit_mean_hr — mean revisit time (hr)
+% cov.revisit_max_hr  — maximum revisit gap (hr)
+
+plotCoverage(cov);   % uses same plotCoverage as single-satellite case
+```
+
+`constellationCoverage` output is format-compatible with `coverageAnalysis` for use with `plotCoverage`.
+
+---
+
+## Link Budget
+
+`linkBudget` computes the RF link budget in two modes:
+
+**Static mode** — single range value:
+```matlab
+[result, fig] = linkBudget( ...
+    'Freq_GHz',     8.0,   ...
+    'P_tx_dBW',     3.0,   ...
+    'G_tx_dBi',     6.0,   ...
+    'G_rx_dBi',     48.0,  ...
+    'T_sys_K',      100,   ...
+    'DataRate_bps', 10e6,  ...
+    'ReqEbN0_dB',   10.0,  ...
+    'Range_km',     1500,  ...
+    'Plot',         true);
+```
+
+**Pass mode** — orbit + ground station, propagates over multiple passes:
+```matlab
+orb = earthOrbit('circular', 410, 51.6);
+gs  = struct('lat', 30.27, 'lon', -97.74, 'alt', 0.15, 'name', 'Austin TX');
+
+[result, fig] = linkBudget(orb, gs, ...
+    'Freq_GHz',     2.2,   ...
+    'P_tx_dBW',     0.0,   ...
+    'G_tx_dBi',     3.0,   ...
+    'G_rx_dBi',     35.0,  ...
+    'T_sys_K',      200,   ...
+    'DataRate_bps', 1e6,   ...
+    'ReqEbN0_dB',   10.0,  ...
+    'NumOrbits',    16,    ...   % ~24 hr for LEO
+    'Plot',         true);
+```
+
+Pass mode generates a four-panel figure showing range, FSPL + link margin, Doppler shift, and received Eb/N0 vs. time. Link quantities are masked to NaN during periods when the satellite is below the minimum elevation angle, so only visible passes are plotted.
+
+### Static mode output fields
+
+| Field | Description |
+|-------|-------------|
+| `result.EIRP_dBW` | Transmitter EIRP = P_tx + G_tx (dBW) |
+| `result.FSPL_dB` | Free-space path loss at the given range (dB) |
+| `result.C_N0_dBHz` | Carrier-to-noise density (dB-Hz) |
+| `result.EbN0_dB` | Achieved Eb/N0 (dB) |
+| `result.LinkMargin_dB` | Link margin = Eb/N0 − ReqEbN0 (dB) |
+| `result.MaxRange_km` | Maximum range that closes the link (km) |
+
+---
+
+## Sensor Footprint
+
+`sensorFootprint(lat_sat, lon_sat, alt_km, half_angle_deg)` computes the ground footprint for a sensor with a given half-angle field of view, using ray-sphere intersection geometry.
+
+```matlab
+% Nadir-pointing sensor at ISS altitude
+fp = sensorFootprint(0, 0, 410, 30);
+fprintf('Footprint radius: %.0f km  Area: %.0f km^2  Min elevation: %.1f deg\n', ...
+    fp.footprint_radius_km, fp.footprint_area_km2, fp.min_elevation_deg);
+
+% Off-nadir pointing (30° east)
+fp = sensorFootprint(40, 0, 410, 15, 'PointEl_deg', 30, 'PointAz_deg', 90);
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `PointEl_deg` | `0` | Pointing elevation above nadir (0 = nadir) |
+| `PointAz_deg` | `0` | Pointing azimuth (0 = North, 90 = East) |
+| `PlotAxes` | — | Axes handle — overlay footprint on existing map |
+| `FillColor` | `[0.3 0.75 0.93]` | Footprint fill color |
+| `FillAlpha` | `0.25` | Footprint fill transparency |
+| `ShowSubSat` | `true` | Mark sub-satellite point |
+| `ShowCenter` | `true` | Mark footprint center point (for off-nadir) |
+
+| Output field | Description |
+|-------------|-------------|
+| `fp.footprint_radius_km` | Ground footprint radius (km) |
+| `fp.footprint_area_km2` | Footprint area (km²) |
+| `fp.min_elevation_deg` | Minimum elevation angle from footprint edge to satellite (deg) |
+| `fp.lat_center` | Footprint center latitude (deg) |
+| `fp.lon_center` | Footprint center longitude (deg) |
+| `fp.lat_boundary` | Footprint boundary latitude vector (deg) |
+| `fp.lon_boundary` | Footprint boundary longitude vector (deg) |
+
+---
+
+## Access Window Gantt
+
+`plotAccessWindowGantt(orb, ground_stations, duration_hr)` produces a Gantt-style chart showing all access windows between a satellite and a network of ground stations. Bars are colored by maximum elevation angle during each pass.
+
+```matlab
+orb = earthOrbit('circular', 410, 51.6);
+
+gs_network = struct(...
+    'name',  {'Svalbard', 'Fairbanks', 'Austin TX', 'Madrid'}, ...
+    'lat',   { 78.2,       64.8,        30.3,        40.4},    ...
+    'lon',   { 15.4,      -147.7,      -97.7,        -3.7},    ...
+    'alt',   {  0.5,        0.1,         0.15,         0.7});
+
+[fig, summary] = plotAccessWindowGantt(orb, gs_network, 24, ...
+    'MinElevation',     10,   ...
+    'StepSize',         30,   ...
+    'ColorByElevation', true, ...
+    'ShowMaxEl',        true);
+
+% summary(k).name, .n_passes, .total_contact_min
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `MinElevation` | `5` | Minimum elevation angle for contact (deg) |
+| `StepSize` | `60` | Propagation time step (s) |
+| `ColorByElevation` | `true` | Color bars by max elevation (hot colormap) |
+| `ShowMaxEl` | `true` | Annotate each bar with peak elevation |
+
+---
+
+## Example: Constellation Coverage Trade
+
+`example_constellation.m` compares three Walker configurations at 550 km, 53°, 24 satellites with varying number of planes:
+
+```
+Config           Mean Coverage   Max Revisit (hr)   Mean Revisit (hr)
+24/1/0 (1 plane)    0.xxx           xx.xx              xx.xx
+24/4/1 (4 planes)   0.xxx           xx.xx              xx.xx
+24/6/1 (6 planes)   0.xxx           xx.xx              xx.xx
+```
+
+It also demonstrates repeating ground track design: a survey of N_rev/N_day ratios near 550 km at i = 98°, selecting the closest match and plotting the track for exactly N_day days to verify repeat closure.
+
+---
+
+## Example: Comms & Footprint Analysis
+
+`example_comms_footprint.m` demonstrates seven analysis scenarios:
+
+| Section | What it shows |
+|---------|--------------|
+| 1 | Static X-band downlink (8 GHz, 1500 km range, 10 Mbps) |
+| 2 | Static UHF command uplink (437 MHz, 800 km range, 9600 bps) |
+| 3 | ISS-like pass analysis over Austin TX — link margin and Doppler over 24 hr |
+| 4 | Nadir footprint vs. altitude (400 / 600 / 1000 km, 30° half-angle) |
+| 5 | Off-nadir pointing trade (ISS 410 km, 15° half-angle, 3 pointing elevations eastward) |
+| 6 | Coverage swath width table: footprint radius and minimum elevation vs. altitude and half-angle |
+| 7 | 24-hour access window Gantt for 7 global ground stations |
